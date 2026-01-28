@@ -1,0 +1,5 @@
+{
+  "name": "Kz.tutorial AI Coding Assistant",
+  "description": "A professional AI Coding Assistant powered by Groq (Llama 3.3). Features a developer-focused UI, syntax highlighting, and a secure admin mode for API key management.",
+  "requestFramePermissions": []
+}

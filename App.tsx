@@ -1,0 +1,222 @@
+
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { supabase } from './services/supabaseClient';
+import { ChatInterface } from './components/ChatInterface';
+import { LandingPage } from './components/LandingPage';
+import { AdminModal } from './components/AdminModal';
+import { AdminDashboard } from './components/AdminDashboard';
+import { SettingsModal } from './components/SettingsModal';
+import { TopUpModal } from './components/TopUpModal';
+import { InboxModal } from './components/InboxModal';
+import { EmailVerification } from './components/EmailVerification';
+import { UpdatePasswordPage } from './components/UpdatePasswordPage';
+import { PrivacyPolicy } from './components/pages/PrivacyPolicy';
+import { TermsOfService } from './components/pages/TermsOfService';
+import { HelpCenter } from './components/pages/HelpCenter';
+import { streamGroqRequest } from './services/groqService';
+import { searchWeb } from './services/serperService';
+import { Message, ApiKeys, AppSettings } from './types';
+import { SYSTEM_PROMPT, ADMIN_TRIGGER_KEYWORD } from './constants';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+
+const MainApp: React.FC = () => {
+  const { session, profile, refreshProfile, loading: authLoading } = useAuth();
+  
+  // --- View State ---
+  const [view, setView] = useState<'landing' | 'chat' | 'admin' | 'privacy' | 'terms' | 'help' | 'verify' | 'reset-password'>('landing');
+  const [registeredEmail, setRegisteredEmail] = useState('');
+
+  // --- Detection for Password Reset Flow ---
+  useEffect(() => {
+    // Supabase mengirimkan token di hash URL untuk recovery
+    const hash = window.location.hash;
+    if (hash && (hash.includes('type=recovery') || hash.includes('type=signup'))) {
+      if (hash.includes('type=recovery')) {
+        setView('reset-password');
+      }
+    }
+  }, []);
+
+  // --- Chat State ---
+  const [messages, setMessages] = useState<Message[]>([
+    { id: 'system-1', role: 'system', content: SYSTEM_PROMPT, timestamp: Date.now() }
+  ]);
+  const [apiKeys, setApiKeys] = useState<ApiKeys>([]);
+  const [serperKey, setSerperKey] = useState<string>('');
+  
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    const saved = localStorage.getItem('kz_ai_settings');
+    const defaultSettings = { terminalMode: false, hapticEnabled: true };
+    return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
+  });
+
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [showInboxModal, setShowInboxModal] = useState(false);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isStreamingRef = useRef(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const fetchSystemKeys = useCallback(async () => {
+    try {
+      const { data } = await supabase.from('system_settings').select('groq_api_keys, serper_api_key').limit(1).single();
+      if (data) {
+        setApiKeys(data.groq_api_keys || []);
+        if (data.serper_api_key) setSerperKey(data.serper_api_key);
+      }
+    } catch (err) { setApiKeys([]); }
+  }, []);
+
+  useEffect(() => {
+    fetchSystemKeys();
+  }, [fetchSystemKeys]);
+
+  useEffect(() => {
+    if (session && view !== 'reset-password') {
+      if (view === 'landing' || view === 'verify') setView('chat');
+    } else if (!session && view !== 'reset-password') {
+      if (view === 'chat' || view === 'admin') setView('landing');
+    }
+  }, [session, view]);
+
+  useEffect(() => {
+    if (session && !profile) setIsProfileLoading(true);
+    else setIsProfileLoading(false);
+  }, [session, profile]);
+
+  const checkUnread = useCallback(async () => {
+    if (!session) return;
+    const { count } = await supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', session.user.id).eq('is_read', false);
+    setUnreadCount(count || 0);
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    checkUnread();
+    const channel = supabase.channel('realtime:notifications').on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${session.user.id}` }, () => {
+      checkUnread();
+    }).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [session, checkUnread]);
+
+  const handleSendMessage = async (content: string, isAnalysis: boolean = false, isSearch: boolean = false, imageBase64?: string) => {
+    if (!session) { setShowSettingsModal(true); return; }
+    if (content.toLowerCase().trim() === ADMIN_TRIGGER_KEYWORD) { setShowAdminModal(true); return; }
+    if (apiKeys.length === 0) {
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `⚠️ **SISTEM BELUM DIKONFIGURASI**\n\nAdmin belum memasukkan API Key.`, timestamp: Date.now() }]);
+      return;
+    }
+
+    let cost = isAnalysis ? 2 : 1;
+    if (imageBase64) cost = 1;
+    
+    try {
+      const { data: lp } = await supabase.from('profiles').select('credits').eq('id', session.user.id).single();
+      if (!lp || lp.credits < cost) {
+         setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `⚠️ **SALDO KURANG**`, timestamp: Date.now() }]);
+         setShowTopUpModal(true);
+         return;
+      }
+    } catch (err) { return; }
+
+    const userContent = imageBase64 ? `![User Image](${imageBase64})\n\n${content}` : content;
+    const newUserMsg: Message = { id: Date.now().toString(), role: 'user', content: userContent, timestamp: Date.now() };
+    setMessages(prev => [...prev, newUserMsg]);
+    setIsLoading(true); isStreamingRef.current = true;
+
+    const selectedModelId = (isAnalysis || isSearch) ? 'llama-3.3-70b-versatile' : 'llama-3.1-8b-instant';
+    const aiMsgId = (Date.now() + 1).toString();
+
+    try {
+      let finalPrompt = content;
+      if (isSearch && !imageBase64) {
+         try {
+           const res = await searchWeb(content, serperKey);
+           finalPrompt = `DATA WEB:\n${res}\n\nUSER QUERY:\n${content}`;
+         } catch (e) {}
+      }
+
+      const apiMessages = [...messages, newUserMsg].map(m => ({ role: m.role, content: m.id === newUserMsg.id ? (isAnalysis ? finalPrompt + "\n\n(Deep Analysis)" : finalPrompt) : m.content }));
+      setMessages(prev => [...prev, { id: aiMsgId, role: 'assistant', content: '', timestamp: Date.now() }]);
+
+      const stream = streamGroqRequest(apiMessages, apiKeys, selectedModelId);
+      let fullContent = '';
+      for await (const chunk of stream) {
+        if (!isStreamingRef.current) break;
+        fullContent += chunk;
+        setMessages(prev => prev.map(m => m.id === aiMsgId ? { ...m, content: fullContent } : m));
+      }
+
+      if (session) {
+        const { data: currentP } = await supabase.from('profiles').select('credits').eq('id', session.user.id).single();
+        if (currentP) await supabase.from('profiles').update({ credits: Math.max(0, currentP.credits - cost) }).eq('id', session.user.id);
+        refreshProfile();
+      }
+    } catch (err: any) {
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `**ERROR:** ${err.message}`, timestamp: Date.now() }]);
+    } finally {
+      setIsLoading(false); isStreamingRef.current = false;
+    }
+  };
+
+  if (authLoading) return <div className="flex items-center justify-center h-screen bg-[#0f172a]"><div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>;
+
+  if (view === 'reset-password') return <UpdatePasswordPage onComplete={() => { setView('landing'); window.location.hash = ''; }} />;
+  if (view === 'verify') return <EmailVerification email={registeredEmail} onLoginClick={() => setView('landing')} />;
+  if (view === 'privacy') return <PrivacyPolicy onBack={() => setView(session ? 'chat' : 'landing')} />;
+  if (view === 'terms') return <TermsOfService onBack={() => setView(session ? 'chat' : 'landing')} />;
+  if (view === 'help') return <HelpCenter onBack={() => setView(session ? 'chat' : 'landing')} />;
+
+  if (!session && view === 'landing') {
+    return (
+      <>
+        <LandingPage onLoginClick={() => setShowSettingsModal(true)} onNavigate={(p) => setView(p as any)} />
+        <SettingsModal 
+          isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)}
+          settings={settings} onUpdateSettings={(s) => setSettings(s)}
+          onClearChat={() => setMessages([{ id: 'system-1', role: 'system', content: SYSTEM_PROMPT, timestamp: Date.now() }])} 
+          onOpenTopUp={() => {}} onNavigate={(p) => { setShowSettingsModal(false); setView(p as any); }}
+          onSignUpSuccess={(e) => { setRegisteredEmail(e); setView('verify'); setShowSettingsModal(false); }}
+        />
+      </>
+    );
+  }
+
+  return (
+    <div className={`h-screen w-full flex flex-col ${settings.terminalMode ? 'bg-black text-green-500' : 'bg-slate-950 text-slate-200'}`}>
+      {view === 'admin' ? (
+        <AdminDashboard onExit={() => { setView('chat'); fetchSystemKeys(); }} />
+      ) : (
+        <ChatInterface 
+          messages={messages} isLoading={isLoading} onSendMessage={handleSendMessage}
+          onClearChat={() => setMessages([{ id: 'system-1', role: 'system', content: SYSTEM_PROMPT, timestamp: Date.now() }])} 
+          onOpenSettings={() => setShowSettingsModal(true)}
+          onOpenInbox={() => setShowInboxModal(true)} unreadCount={unreadCount} 
+          error={error} settings={settings} userCredits={profile?.credits || 0}
+          isProfileLoading={isProfileLoading}
+        />
+      )}
+      <AdminModal isOpen={showAdminModal} onClose={() => setShowAdminModal(false)} onSuccess={() => setView('admin')} />
+      <SettingsModal 
+        isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)}
+        settings={settings} onUpdateSettings={(s) => { setSettings(s); localStorage.setItem('kz_ai_settings', JSON.stringify(s)); }}
+        onClearChat={() => setMessages([{ id: 'system-1', role: 'system', content: SYSTEM_PROMPT, timestamp: Date.now() }])} 
+        onOpenTopUp={() => { setShowSettingsModal(false); setShowTopUpModal(true); }}
+        onNavigate={(p) => { setShowSettingsModal(false); setView(p as any); }}
+      />
+      <TopUpModal isOpen={showTopUpModal} onClose={() => setShowTopUpModal(false)} />
+      {session && <InboxModal isOpen={showInboxModal} onClose={() => setShowInboxModal(false)} userId={session.user.id} onUpdateUnread={checkUnread} />}
+    </div>
+  );
+};
+
+const App = () => (
+  <AuthProvider>
+    <MainApp />
+  </AuthProvider>
+);
+
+export default App;
