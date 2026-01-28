@@ -186,7 +186,7 @@ const MainApp: React.FC = () => {
   }
 
   return (
-    <div className={`h-screen w-full flex flex-col ${settings.terminalMode ? 'bg-black text-green-500' : 'bg-slate-950 text-slate-200'}`}>
+    <div className={`h-[100dvh] w-full flex flex-col overflow-hidden ${settings.terminalMode ? 'bg-black text-green-500' : 'bg-slate-950 text-slate-200'}`}>
       {view === 'admin' ? (
         <AdminDashboard onExit={() => { setView('chat'); fetchSystemKeys(); }} />
       ) : (

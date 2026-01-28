@@ -1,9 +1,19 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Kz.tutorial AI Assistant</title>
+    
+    <!-- PWA & Mobile Optimization -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Kz AI">
+    <link rel="apple-touch-icon" href="https://api.iconify.design/lucide:bot.svg?color=%233b82f6">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
@@ -12,12 +22,13 @@
         font-family: 'Inter', sans-serif;
         background-color: #0f172a; /* Slate 950 */
         color: #e2e8f0; /* Slate 200 */
+        overscroll-behavior-y: contain; /* Mencegah pull-to-refresh yang mengganggu di PWA */
       }
       code, pre {
         font-family: 'JetBrains Mono', monospace;
       }
       
-      /* Custom Scrollbar for "VS Code" feel */
+      /* Custom Scrollbar */
       ::-webkit-scrollbar {
         width: 10px;
         height: 10px;
