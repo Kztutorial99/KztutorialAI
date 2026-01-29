@@ -131,9 +131,7 @@ export async function* streamGroqRequest(
 
   const systemMessage = messages.find(msg => msg.role === 'system');
   const baseSystem = systemMessage ? systemMessage.content : "You are an AI Assistant.";
-  
-  // --- PASTIKAN VARIABLE INI ADA DI ATAS ---
-  // const timeContext = getTimeContext(); 
+  const timeContext = getTimeContext(); 
   
   const finalSystemContent = `
   ${baseSystem}
