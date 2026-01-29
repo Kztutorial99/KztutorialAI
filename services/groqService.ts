@@ -134,7 +134,7 @@ export async function* streamGroqRequest(
   const timeContext = getTimeContext(); 
 
   // --- PASTIKAN VARIABLE INI ADA DI ATAS ---
-  const timeContext = getTimeContext(); 
+ // const timeContext = getTimeContext(); 
   
   const finalSystemContent = `
   ${baseSystem}
