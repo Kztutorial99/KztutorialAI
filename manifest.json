@@ -2,7 +2,7 @@
 {
   "name": "Kz.tutorial AI Coding Assistant",
   "short_name": "Kz AI",
-  "description": "Professional AI Coding Assistant",
+  "description": "Professional AI Coding Assistant powered by Groq",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

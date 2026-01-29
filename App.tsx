@@ -28,7 +28,6 @@ const MainApp: React.FC = () => {
 
   // --- Detection for Password Reset Flow ---
   useEffect(() => {
-    // Supabase mengirimkan token di hash URL untuk recovery
     const hash = window.location.hash;
     if (hash && (hash.includes('type=recovery') || hash.includes('type=signup'))) {
       if (hash.includes('type=recovery')) {
@@ -102,6 +101,15 @@ const MainApp: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [session, checkUnread]);
 
+  /**
+   * Helper untuk membersihkan tag memori dari tampilan UI
+   */
+  const cleanResponseText = (text: string) => {
+    // Regex ini nanti juga akan membersihkan ACTION dan STATS di komponen UI
+    // Tapi untuk raw message, kita bersihkan SAVE_MEMORY saja
+    return text.replace(/\[SAVE_MEMORY: .*?\]/g, '').trim();
+  };
+
   const handleSendMessage = async (content: string, isAnalysis: boolean = false, isSearch: boolean = false, imageBase64?: string) => {
     if (!session) { setShowSettingsModal(true); return; }
     if (content.toLowerCase().trim() === ADMIN_TRIGGER_KEYWORD) { setShowAdminModal(true); return; }
@@ -122,12 +130,12 @@ const MainApp: React.FC = () => {
       }
     } catch (err) { return; }
 
-    const userContent = imageBase64 ? `![User Image](${imageBase64})\n\n${content}` : content;
-    const newUserMsg: Message = { id: Date.now().toString(), role: 'user', content: userContent, timestamp: Date.now() };
+    const userContentForUI = imageBase64 ? `![User Image](${imageBase64})\n\n${content}` : content;
+    const newUserMsg: Message = { id: Date.now().toString(), role: 'user', content: userContentForUI, timestamp: Date.now() };
     setMessages(prev => [...prev, newUserMsg]);
     setIsLoading(true); isStreamingRef.current = true;
 
-    const selectedModelId = (isAnalysis || isSearch) ? 'llama-3.3-70b-versatile' : 'llama-3.1-8b-instant';
+    const selectedModelId = imageBase64 ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.3-70b-versatile';
     const aiMsgId = (Date.now() + 1).toString();
 
     try {
@@ -139,15 +147,34 @@ const MainApp: React.FC = () => {
          } catch (e) {}
       }
 
-      const apiMessages = [...messages, newUserMsg].map(m => ({ role: m.role, content: m.id === newUserMsg.id ? (isAnalysis ? finalPrompt + "\n\n(Deep Analysis)" : finalPrompt) : m.content }));
+      const apiMessages = [...messages, newUserMsg].map(m => {
+        if (m.id === newUserMsg.id && imageBase64) {
+          return {
+            role: m.role,
+            content: [
+              { type: "text", text: content },
+              { type: "image_url", image_url: { url: imageBase64 } }
+            ]
+          };
+        }
+        return { 
+          role: m.role, 
+          content: m.id === newUserMsg.id ? (isAnalysis ? finalPrompt + "\n\n(Deep Analysis)" : finalPrompt) : m.content 
+        };
+      });
+
       setMessages(prev => [...prev, { id: aiMsgId, role: 'assistant', content: '', timestamp: Date.now() }]);
 
-      const stream = streamGroqRequest(apiMessages, apiKeys, selectedModelId);
+      // UPDATE: Pass profile.credits ke streamGroqRequest
+      const stream = streamGroqRequest(apiMessages, apiKeys, selectedModelId, session.user.id, profile?.credits || 0);
       let fullContent = '';
       for await (const chunk of stream) {
         if (!isStreamingRef.current) break;
         fullContent += chunk;
-        setMessages(prev => prev.map(m => m.id === aiMsgId ? { ...m, content: fullContent } : m));
+        
+        // Bersihkan tag dari tampilan UI secara real-time
+        const cleanedContent = cleanResponseText(fullContent);
+        setMessages(prev => prev.map(m => m.id === aiMsgId ? { ...m, content: cleanedContent } : m));
       }
 
       if (session) {
@@ -162,7 +189,7 @@ const MainApp: React.FC = () => {
     }
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-screen bg-[#0f172a]"><div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>;
+  if (authLoading) return <div className="h-[100dvh] w-full flex items-center justify-center bg-[#0f172a]"><div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>;
 
   if (view === 'reset-password') return <UpdatePasswordPage onComplete={() => { setView('landing'); window.location.hash = ''; }} />;
   if (view === 'verify') return <EmailVerification email={registeredEmail} onLoginClick={() => setView('landing')} />;
@@ -170,33 +197,22 @@ const MainApp: React.FC = () => {
   if (view === 'terms') return <TermsOfService onBack={() => setView(session ? 'chat' : 'landing')} />;
   if (view === 'help') return <HelpCenter onBack={() => setView(session ? 'chat' : 'landing')} />;
 
-  if (!session && view === 'landing') {
-    return (
-      <>
-        <LandingPage onLoginClick={() => setShowSettingsModal(true)} onNavigate={(p) => setView(p as any)} />
-        <SettingsModal 
-          isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)}
-          settings={settings} onUpdateSettings={(s) => setSettings(s)}
-          onClearChat={() => setMessages([{ id: 'system-1', role: 'system', content: SYSTEM_PROMPT, timestamp: Date.now() }])} 
-          onOpenTopUp={() => {}} onNavigate={(p) => { setShowSettingsModal(false); setView(p as any); }}
-          onSignUpSuccess={(e) => { setRegisteredEmail(e); setView('verify'); setShowSettingsModal(false); }}
-        />
-      </>
-    );
-  }
-
   return (
-    <div className={`h-[100dvh] w-full flex flex-col overflow-hidden ${settings.terminalMode ? 'bg-black text-green-500' : 'bg-slate-950 text-slate-200'}`}>
-      {view === 'admin' ? (
+    <div className={`fixed inset-0 h-[100dvh] w-full flex flex-col bg-[#0f172a] text-slate-200 overflow-hidden ${settings.terminalMode ? 'bg-black text-green-500' : ''}`}>
+      {view === 'landing' && !session ? (
+        <LandingPage onLoginClick={() => setShowSettingsModal(true)} onNavigate={(p) => setView(p as any)} />
+      ) : view === 'admin' ? (
         <AdminDashboard onExit={() => { setView('chat'); fetchSystemKeys(); }} />
       ) : (
         <ChatInterface 
           messages={messages} isLoading={isLoading} onSendMessage={handleSendMessage}
           onClearChat={() => setMessages([{ id: 'system-1', role: 'system', content: SYSTEM_PROMPT, timestamp: Date.now() }])} 
           onOpenSettings={() => setShowSettingsModal(true)}
-          onOpenInbox={() => setShowInboxModal(true)} unreadCount={unreadCount} 
+          onOpenInbox={() => setShowInboxModal(true)} 
+          unreadCount={unreadCount} 
           error={error} settings={settings} userCredits={profile?.credits || 0}
           isProfileLoading={isProfileLoading}
+          onOpenTopUp={() => setShowTopUpModal(true)} // Prop baru untuk Action Button
         />
       )}
       <AdminModal isOpen={showAdminModal} onClose={() => setShowAdminModal(false)} onSuccess={() => setView('admin')} />

@@ -25,12 +25,12 @@ export const searchWeb = async (query: string, apiKey: string) => {
     
     if (!data.organic || data.organic.length === 0) return "Tidak ditemukan hasil pencarian yang relevan.";
 
-    // Format hasil agar mudah dibaca AI
-    const summary = data.organic.map((item: any, index: number) => {
-      return `[Sumber ${index + 1} - ${item.title}]:\n${item.snippet}\n(Link: ${item.link})`;
-    }).join("\n\n");
+    // Format hasil agar mudah dibaca AI dan dikutip sesuai format [SUMBER: Title | Link]
+    const summary = data.organic.map((item: any) => {
+      return `Title: ${item.title}\nLink: ${item.link}\nSnippet: ${item.snippet}\n---`;
+    }).join("\n");
 
-    return summary;
+    return `HASIL PENCARIAN WEB (Gunakan data ini untuk menjawab):\n${summary}`;
 
   } catch (error: any) {
     console.error("Search API Error:", error);

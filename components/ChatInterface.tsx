@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
-import { Send, Bot, User, Code2, Settings, Zap, Terminal, AlertTriangle, FileCode, Sparkles, BrainCircuit, ArrowDown, ChevronDown, Coins, Bell, Trash2, Check, Copy, Share2, ThumbsUp, ThumbsDown, Globe, Camera, Maximize2, X, Loader2 } from 'lucide-react';
+import { Send, Bot, User, Code2, Settings, Zap, Terminal, AlertTriangle, FileCode, Sparkles, BrainCircuit, ArrowDown, ChevronDown, Coins, Bell, Trash2, Check, Copy, Share2, ThumbsUp, ThumbsDown, Globe, Camera, Maximize2, X, Loader2, Link as LinkIcon, ExternalLink, CreditCard } from 'lucide-react';
 import { Message, AppSettings } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
 import { ImageUpload } from './ImageUpload';
@@ -11,14 +11,14 @@ interface ChatInterfaceProps {
   onClearChat: () => void;
   onOpenSettings: () => void;
   onOpenInbox: () => void;
+  onOpenTopUp: () => void; 
   unreadCount: number;
   settings: AppSettings;
   error: string | null;
   userCredits: number;
-  isProfileLoading: boolean; // Props baru untuk status loading profil
+  isProfileLoading: boolean;
 }
 
-// --- BLINKING BOT AVATAR ---
 const BlinkingBot = ({ className, size = 24 }: { className?: string, size?: number }) => (
   <svg 
     width={size} 
@@ -49,8 +49,48 @@ const BlinkingBot = ({ className, size = 24 }: { className?: string, size?: numb
   </svg>
 );
 
-// --- MESSAGE ACTIONS (COPY, LIKE, DISLIKE, SHARE) ---
-const MessageActions = ({ content }: { content: string }) => {
+// --- COMPONENT: SOURCE CARD ---
+const SourceCard: React.FC<{ title: string, url: string, isTerminal?: boolean }> = ({ title, url, isTerminal }) => {
+  let hostname = "web";
+  try {
+    hostname = new URL(url).hostname.replace('www.', '');
+  } catch (e) {}
+
+  const terminalClasses = "bg-black border border-green-800 hover:border-green-500 rounded-none text-green-500";
+  const standardClasses = "bg-slate-900/40 border border-slate-700/50 rounded-xl hover:bg-slate-800 hover:border-blue-500/30";
+
+  return (
+    <a 
+      href={url} 
+      target="_blank" 
+      rel="noopener noreferrer" 
+      className={`flex items-center gap-3 px-3 py-2.5 transition-all group max-w-[200px] flex-shrink-0 ${isTerminal ? terminalClasses : standardClasses}`}
+    >
+      <div className={`w-8 h-8 flex items-center justify-center shrink-0 border transition-colors ${
+        isTerminal 
+          ? 'bg-black border-green-800 group-hover:border-green-500 rounded-none' 
+          : 'bg-slate-800 border-slate-700 group-hover:border-blue-500/30 rounded-lg'
+      }`}>
+        <img 
+          src={`https://www.google.com/s2/favicons?domain=${hostname}&sz=32`} 
+          alt="icon" 
+          className="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity"
+          onError={(e) => { e.currentTarget.style.display='none'; }}
+        />
+        <Globe size={14} className={`${isTerminal ? 'text-green-700' : 'text-slate-500'} absolute group-hover:hidden`} style={{display: 'none'}} /> 
+      </div>
+      <div className="flex flex-col min-w-0">
+        <span className={`text-xs font-bold truncate transition-colors ${isTerminal ? 'text-green-500 group-hover:text-green-400' : 'text-slate-300 group-hover:text-blue-400'}`}>{title}</span>
+        <div className={`flex items-center gap-1 text-[10px] truncate ${isTerminal ? 'text-green-800' : 'text-slate-500'}`}>
+          <LinkIcon size={10} />
+          <span className="truncate">{hostname}</span>
+        </div>
+      </div>
+    </a>
+  );
+};
+
+const MessageActions = ({ content, isTerminal }: { content: string, isTerminal: boolean }) => {
   const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState<'like' | 'dislike' | null>(null);
 
@@ -71,26 +111,37 @@ const MessageActions = ({ content }: { content: string }) => {
     }
   };
 
+  const btnClass = isTerminal 
+    ? "text-green-700 hover:text-green-400" 
+    : "text-slate-400 hover:text-white";
+
   return (
     <div className="flex items-center gap-4 mt-4 mb-2 opacity-60 hover:opacity-100 transition-opacity pl-1">
-      <button onClick={handleCopy} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors" title="Salin">
-        {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+      <button onClick={handleCopy} className={`flex items-center gap-1.5 text-xs transition-colors ${btnClass}`} title="Salin">
+        {copied ? <Check size={14} className={isTerminal ? "text-green-500" : "text-emerald-400"} /> : <Copy size={14} />}
       </button>
-      <button onClick={handleLike} className={`flex items-center gap-1.5 text-xs transition-colors ${feedback === 'like' ? 'text-blue-400' : 'text-slate-400 hover:text-blue-400'}`}>
-        <ThumbsUp size={14} className={feedback === 'like' ? 'fill-blue-400' : ''} />
+      <button onClick={handleLike} className={`flex items-center gap-1.5 text-xs transition-colors ${
+        feedback === 'like' 
+          ? (isTerminal ? 'text-green-400' : 'text-blue-400')
+          : (isTerminal ? 'text-green-700 hover:text-green-400' : 'text-slate-400 hover:text-blue-400')
+      }`}>
+        <ThumbsUp size={14} className={feedback === 'like' ? (isTerminal ? 'fill-green-400' : 'fill-blue-400') : ''} />
       </button>
-      <button onClick={handleDislike} className={`flex items-center gap-1.5 text-xs transition-colors ${feedback === 'dislike' ? 'text-red-400' : 'text-slate-400 hover:text-red-400'}`}>
+      <button onClick={handleDislike} className={`flex items-center gap-1.5 text-xs transition-colors ${
+        feedback === 'dislike' 
+          ? 'text-red-400' 
+          : (isTerminal ? 'text-green-700 hover:text-red-400' : 'text-slate-400 hover:text-red-400')
+      }`}>
         <ThumbsDown size={14} className={feedback === 'dislike' ? 'fill-red-400' : ''} />
       </button>
-      <button onClick={handleShare} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors" title="Bagikan">
+      <button onClick={handleShare} className={`flex items-center gap-1.5 text-xs transition-colors ${btnClass}`} title="Bagikan">
         <Share2 size={14} />
       </button>
     </div>
   );
 };
 
-// --- SMART ACTIONS V2 ---
-const SuggestedActions = memo(({ lastMessage, onAction }: { lastMessage: string, onAction: (text: string) => void }) => {
+const SuggestedActions = memo(({ lastMessage, onAction, isTerminal }: { lastMessage: string, onAction: (text: string) => void, isTerminal: boolean }) => {
   const [actions, setActions] = useState<{ label: string; icon: React.ReactNode; prompt: string }[]>([]);
 
   useEffect(() => {
@@ -102,15 +153,13 @@ const SuggestedActions = memo(({ lastMessage, onAction }: { lastMessage: string,
       candidates.push(
         { label: "Cara Jalankan?", icon: <Terminal size={12}/>, prompt: "Bagaimana cara menjalankan script ini di Termux?" },
         { label: "Jelaskan Code", icon: <FileCode size={12}/>, prompt: "Jelaskan alur kode di atas baris per baris." },
-        { label: "Optimalkan", icon: <Zap size={12}/>, prompt: "Bisakah kode ini dibuat lebih efisien?" },
-        { label: "Cari Bug", icon: <AlertTriangle size={12}/>, prompt: "Analisis apakah ada potensi error di kode ini." }
+        { label: "Optimalkan", icon: <Zap size={12}/>, prompt: "Bisakah kode ini dibuat lebih efisien?" }
       );
     } 
     else if (lowerMsg.includes("termux") || lowerMsg.includes("pkg") || lowerMsg.includes("apt")) {
       candidates.push(
         { label: "Fungsi Command", icon: <Terminal size={12}/>, prompt: "Jelaskan fungsi perintah tersebut." },
-        { label: "Cara Install", icon: <Zap size={12}/>, prompt: "Bagaimana cara install paket ini?" },
-        { label: "Fix Permission", icon: <AlertTriangle size={12}/>, prompt: "Bagaimana cara mengatasi error permission denied?" }
+        { label: "Cara Install", icon: <Zap size={12}/>, prompt: "Bagaimana cara install paket ini?" }
       );
     }
     else if (lowerMsg.includes("error") || lowerMsg.includes("failed") || lowerMsg.includes("salah")) {
@@ -120,11 +169,10 @@ const SuggestedActions = memo(({ lastMessage, onAction }: { lastMessage: string,
       );
     }
     
+    // Default actions only if no context found
     if (candidates.length === 0) {
       candidates.push(
-        { label: "Buat Kode Python", icon: <Code2 size={12}/>, prompt: "Buatkan kode Python sederhana untuk pemula." },
         { label: "Tips Termux", icon: <Terminal size={12}/>, prompt: "Berikan tips trik rahasia Termux." },
-        { label: "Apa itu AI?", icon: <BrainCircuit size={12}/>, prompt: "Jelaskan cara kerja AI dengan bahasa sederhana." },
         { label: "Ide Project", icon: <Sparkles size={12}/>, prompt: "Berikan ide project coding yang seru." }
       );
     }
@@ -134,14 +182,18 @@ const SuggestedActions = memo(({ lastMessage, onAction }: { lastMessage: string,
   if (!actions.length) return null;
 
   return (
-    <div className="mt-4 pt-3 border-t border-slate-700/30 flex flex-wrap gap-2 animate-in slide-in-from-bottom-2 fade-in duration-500">
+    <div className={`mt-4 pt-3 flex flex-wrap gap-2 animate-in slide-in-from-bottom-2 fade-in duration-500 ${isTerminal ? 'border-t border-green-900' : 'border-t border-slate-700/30'}`}>
       {actions.map((action, idx) => (
         <button
           key={idx}
           onClick={() => onAction(action.prompt)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-blue-600/20 border border-slate-700 hover:border-blue-500/50 rounded-lg text-xs text-slate-300 hover:text-blue-300 transition-all group active:scale-95"
+          className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs transition-all group active:scale-95 ${
+            isTerminal 
+              ? 'bg-black border-green-800 text-green-600 hover:bg-green-900/20 hover:text-green-400 hover:border-green-500 rounded-none' 
+              : 'bg-slate-800 hover:bg-blue-600/20 border-slate-700 hover:border-blue-500/50 text-slate-300 hover:text-blue-300'
+          }`}
         >
-          <span className="text-blue-400 group-hover:text-blue-300 opacity-70">{action.icon}</span>
+          <span className={isTerminal ? "text-green-700 group-hover:text-green-400" : "text-blue-400 group-hover:text-blue-300 opacity-70"}>{action.icon}</span>
           {action.label}
         </button>
       ))}
@@ -149,7 +201,7 @@ const SuggestedActions = memo(({ lastMessage, onAction }: { lastMessage: string,
   );
 });
 
-// --- HELPER FUNCTIONS ---
+// --- HELPER PARSING ---
 const parseMessageContent = (content: string) => {
   const openTag = '<thinking>';
   const closeTag = '</thinking>';
@@ -168,44 +220,97 @@ const parseMessageContent = (content: string) => {
   return { hasReasoning: true, reasoning: reasoning.trim(), finalAnswer: (content.substring(0, openIndex) + postText).trim() };
 };
 
-const ThinkingIndicator = () => (
-  <div className="flex items-center gap-2 p-3 bg-slate-800/30 rounded-2xl w-fit animate-pulse border border-slate-700/30">
-    <BrainCircuit size={16} className="text-purple-400" />
-    <span className="text-xs text-slate-500 font-mono">AI sedang berpikir...</span>
+// --- HELPER: PARSE SPECIAL TAGS ---
+const parseSpecialTags = (content: string) => {
+  // 1. Sources
+  const sourceRegex = /\[SUMBER:\s*(.*?)\s*\|\s*(.*?)\]/g;
+  const sources: { title: string, url: string }[] = [];
+  let match;
+  while ((match = sourceRegex.exec(content)) !== null) {
+    if (match[1] && match[2]) sources.push({ title: match[1].trim(), url: match[2].trim() });
+  }
+
+  // 2. Actions (e.g. [ACTION:OPEN_TOPUP])
+  const actionRegex = /\[ACTION:\s*([A-Z_]+)\s*\]/g;
+  const actions: string[] = [];
+  while ((match = actionRegex.exec(content)) !== null) {
+    if (match[1]) actions.push(match[1].trim());
+  }
+
+  // 3. Stats
+  const statsRegex = /\[STATS:\s*(.*?)\]/g;
+  let stats = null;
+  match = statsRegex.exec(content);
+  if (match && match[1]) stats = match[1].trim();
+
+  // 4. Clean Content
+  let cleanContent = content
+    .replace(sourceRegex, '')
+    .replace(actionRegex, '')
+    .replace(statsRegex, '')
+    .trim();
+
+  // Extra cleanup for lists
+  if (sources.length > 0) {
+    const listSectionRegex = /\n+(?:#+\s*)?(?:\*\*|__)?(?:Sumber|Referensi|Sources|References|Citations)(?:\*\*|__)?\s*:?\s*(?:\n\s*(?:[-*]|\d+\.).*)+$/i;
+    const hangingHeaderRegex = /\n+(?:#+\s*)?(?:\*\*|__)?(?:Sumber|Referensi|Sources|References|Citations)(?:\*\*|__)?\s*:?\s*$/i;
+    cleanContent = cleanContent.replace(listSectionRegex, '').replace(hangingHeaderRegex, '').trim();
+  }
+
+  return { cleanContent, sources, actions, stats };
+};
+
+const ThinkingIndicator = ({ isTerminal }: { isTerminal: boolean }) => (
+  <div className={`flex items-center gap-2 p-3 w-fit animate-pulse border ${
+    isTerminal 
+      ? 'bg-black border-green-800 rounded-none text-green-500' 
+      : 'bg-slate-800/30 rounded-2xl border-slate-700/30'
+  }`}>
+    <BrainCircuit size={16} className={isTerminal ? "text-green-500" : "text-purple-400"} />
+    <span className={`text-xs font-mono ${isTerminal ? "text-green-500" : "text-slate-500"}`}>AI sedang berpikir...</span>
   </div>
 );
 
-const ReasoningAccordion: React.FC<{ reasoning: string; isStreaming: boolean }> = ({ reasoning, isStreaming }) => {
+const ReasoningAccordion: React.FC<{ reasoning: string; isStreaming: boolean; isTerminal: boolean }> = ({ reasoning, isStreaming, isTerminal }) => {
   const [isOpen, setIsOpen] = useState(false);
   useEffect(() => { if (isStreaming) setIsOpen(true); else setIsOpen(false); }, [isStreaming]);
 
+  const containerClass = isTerminal 
+    ? "mb-4 border border-green-800 rounded-none bg-black"
+    : "mb-4 border border-slate-700/50 rounded-lg overflow-hidden bg-black/20";
+    
+  const buttonClass = isTerminal
+    ? "w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-green-700 hover:text-green-500 hover:bg-green-900/10 transition-colors"
+    : "w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors";
+
+  const contentClass = isTerminal
+    ? "px-3 py-3 border-t border-green-900 bg-black text-xs font-mono text-green-600 whitespace-pre-wrap leading-relaxed"
+    : "px-3 py-3 border-t border-slate-700/50 bg-[#111] text-xs font-mono text-slate-400 whitespace-pre-wrap leading-relaxed animate-in slide-in-from-top-2";
+
   return (
-    <div className="mb-4 border border-slate-700/50 rounded-lg overflow-hidden bg-black/20">
-      <button onClick={() => setIsOpen(!isOpen)} className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors">
-        <BrainCircuit size={14} className={isStreaming ? "animate-pulse text-purple-400" : "text-slate-500"} />
+    <div className={containerClass}>
+      <button onClick={() => setIsOpen(!isOpen)} className={buttonClass}>
+        <BrainCircuit size={14} className={isStreaming ? "animate-pulse" : ""} />
         <span>{isStreaming ? "Thinking Process..." : "Lihat Proses Berpikir"}</span>
         <ChevronDown size={12} className={`ml-auto transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
-        <div className="px-3 py-3 border-t border-slate-700/50 bg-[#111] text-xs font-mono text-slate-400 whitespace-pre-wrap leading-relaxed animate-in slide-in-from-top-2">
+        <div className={contentClass}>
           {reasoning}
-          {isStreaming && <span className="inline-block w-1.5 h-3 ml-1 bg-purple-500 animate-pulse"/>}
+          {isStreaming && <span className={`inline-block w-1.5 h-3 ml-1 animate-pulse ${isTerminal ? 'bg-green-500' : 'bg-purple-500'}`}/>}
         </div>
       )}
     </div>
   );
 };
 
-// --- MAIN COMPONENT ---
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
-  messages, isLoading, onSendMessage, onClearChat, onOpenSettings, onOpenInbox, unreadCount, settings, error, userCredits, isProfileLoading 
+  messages, isLoading, onSendMessage, onClearChat, onOpenSettings, onOpenInbox, onOpenTopUp, unreadCount, settings, error, userCredits, isProfileLoading 
 }) => {
   const [input, setInput] = useState('');
   const [isAnalysisMode, setIsAnalysisMode] = useState(false);
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  
-  // STATE BARU: Untuk Zoom Gambar (Lightbox)
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -213,16 +318,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [isRinging, setIsRinging] = useState(false);
   const prevUnreadCountRef = useRef(unreadCount);
+  
+  const prevLoadingRef = useRef(isLoading);
+  const { terminalMode } = settings;
 
-  // --- HITUNG BIAYA REAL-TIME (UPDATED) ---
   let currentCost = 1;
-  if (isAnalysisMode) currentCost = 2; // DISKON: 2 Kredit
-  if (selectedImage) currentCost = 1; // MATA DEWA: 1 Kredit (Murah)
+  if (isAnalysisMode) currentCost = 2;
+  if (selectedImage) currentCost = 1;
 
-  // Cek Apakah Kredit Cukup? (Hanya valid jika profil sudah termuat)
   const canSend = userCredits >= currentCost;
 
-  // Notification Effect
   useEffect(() => {
     if (unreadCount > prevUnreadCountRef.current) {
       setIsRinging(true);
@@ -237,7 +342,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (scrollContainerRef.current) {
       const { scrollHeight, clientHeight, scrollTop } = scrollContainerRef.current;
       const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
-      if (force || isAtBottom) scrollContainerRef.current.scrollTo({ top: scrollHeight, behavior: 'smooth' });
+      if (force || isAtBottom) {
+        scrollContainerRef.current.scrollTo({ 
+          top: scrollHeight, 
+          behavior: 'smooth' 
+        });
+      }
     }
   };
 
@@ -248,7 +358,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  useEffect(() => { scrollToBottom(true); }, [messages]);
+  useEffect(() => {
+    if (prevLoadingRef.current === true && isLoading === false) {
+      scrollToBottom(true);
+    }
+    prevLoadingRef.current = isLoading;
+  }, [isLoading]);
+
+  useEffect(() => {
+    if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
+      scrollToBottom(true);
+    }
+  }, [messages.length]);
 
   useEffect(() => {
     if (!isLoading && messages.length > 0 && messages[messages.length - 1].role === 'assistant' && settings.hapticEnabled) {
@@ -258,10 +379,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Validasi tambahan di UI: Blokir jika saldo kurang (setelah loading)
     if ((!input.trim() && !selectedImage) || isLoading || (!canSend && !isProfileLoading) || isProfileLoading) return;
     
-    // Kirim status search mode & image
     onSendMessage(input, isAnalysisMode, isSearchMode, selectedImage || undefined);
     
     setInput('');
@@ -271,148 +390,223 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
-  // --- FUNGSI RENDER PESAN USER (FIX DISPLAY & ZOOM) ---
   const renderUserMessage = (content: string) => {
-    // Cek apakah pesan mengandung format gambar Markdown ![...](data:...)
+    let imageUrl = '';
+    let textPart = content;
+
     if (content.startsWith('![User Image]')) {
-      // Kita pisahkan Gambar dan Teks agar rapi
       const splitIndex = content.indexOf(')\n\n');
       if (splitIndex !== -1) {
-        const imagePart = content.substring(0, splitIndex + 1); // Bagian Gambar
-        const textPart = content.substring(splitIndex + 3);     // Bagian Teks
-        
-        // Ambil URL Base64 dari dalam kurung (...)
-        const imageUrl = imagePart.match(/\((.*?)\)/)?.[1];
-
-        return (
-          <div className="flex flex-col gap-2">
-            {imageUrl && (
-              // FIX: Menggunakan Overlay State, bukan window.open
-              <div className="relative group cursor-pointer" onClick={() => setZoomedImage(imageUrl)}>
-                <img 
-                  src={imageUrl} 
-                  alt="Uploaded" 
-                  className="max-w-full rounded-lg border border-white/20 shadow-sm max-h-64 object-cover"
-                />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
-                   <Maximize2 className="text-white" size={24} />
-                </div>
-              </div>
-            )}
-            {textPart && <p className="whitespace-pre-wrap">{textPart}</p>}
-          </div>
-        );
+        const imagePart = content.substring(0, splitIndex + 1);
+        textPart = content.substring(splitIndex + 3);
+        imageUrl = imagePart.match(/\((.*?)\)/)?.[1] || '';
       }
     }
-    // Jika tidak ada gambar, render teks biasa
-    return <p className="whitespace-pre-wrap">{content}</p>;
+
+    const bubbleClass = terminalMode
+      ? "bg-black border border-green-500 text-green-500 rounded-none px-4 py-2.5 w-fit max-w-[90%] break-words font-mono"
+      : "bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-none shadow-sm w-fit max-w-[90%] break-words";
+
+    return (
+      <div className="flex flex-col gap-2 items-end w-full">
+        {imageUrl && (
+          <div className="relative group cursor-pointer mb-1" onClick={() => setZoomedImage(imageUrl)}>
+            <img 
+              src={imageUrl} 
+              alt="Uploaded" 
+              className={`max-h-60 object-contain ${terminalMode ? 'rounded-none border border-green-500' : 'rounded-xl border border-white/10 shadow-lg'}`}
+            />
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+               <Maximize2 className="text-white" size={20} />
+            </div>
+          </div>
+        )}
+        {textPart && (
+          <div className={bubbleClass}>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed">{textPart}</p>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const displayMessages = messages.filter(m => m.role !== 'system');
-  const fontClass = settings.terminalMode ? 'font-mono tracking-tight' : 'font-sans';
+  const fontClass = terminalMode ? 'font-mono tracking-tight text-green-500 selection:bg-green-500/30' : 'font-sans';
+  const headerClass = terminalMode ? 'bg-black border-green-900 border-b-2' : 'bg-slate-900/80 border-slate-800 shadow-sm border-b';
 
   return (
-    <div className={`flex flex-col h-screen bg-[#0f172a] ${fontClass}`}>
+    <div className={`flex flex-col h-full relative ${fontClass} ${terminalMode ? 'bg-black' : 'bg-slate-950'}`}>
       
-      {/* --- HEADER --- */}
-      <header className={`h-16 border-b flex items-center justify-between px-3 sm:px-4 sticky top-0 z-20 backdrop-blur-md ${settings.terminalMode ? 'bg-black/90 border-green-900' : 'bg-slate-900/80 border-slate-800 shadow-sm'}`}>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-white shadow-lg ${settings.terminalMode ? 'bg-green-900 shadow-green-900/20' : 'bg-gradient-to-br from-blue-600 to-indigo-600 shadow-blue-900/20 ring-1 ring-white/10'}`}>
-            <Code2 size={18} className={settings.terminalMode ? 'text-green-400' : 'text-white'} />
+      {terminalMode && <div className="crt-scanlines fixed inset-0 z-[100] pointer-events-none opacity-20"></div>}
+
+      <header className={`h-16 flex items-center justify-between px-4 shrink-0 z-20 backdrop-blur-md ${headerClass}`}>
+        <div className="flex items-center gap-3">
+          <div className={`w-9 h-9 flex items-center justify-center text-white shadow-lg ${terminalMode ? 'bg-green-900 rounded-none' : 'bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl'}`}>
+            <Code2 size={18} className={terminalMode ? "text-green-300" : "text-white"} />
           </div>
-          <div>
-            <h1 className={`font-bold text-xs sm:text-sm tracking-wide ${settings.terminalMode ? 'text-green-500' : 'text-white'}`}>AI ASISTEN</h1>
+          <div className="flex flex-col">
+            <h1 className={`font-bold text-sm ${terminalMode ? 'text-green-500' : 'text-white'}`}>AI ASISTEN</h1>
             <div className="flex items-center gap-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${settings.terminalMode ? 'bg-green-500' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'}`}></span>
-              <span className={`text-[10px] font-medium ${settings.terminalMode ? 'text-green-700' : 'text-slate-400'}`}>Kz.tutorial</span>
+              <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${terminalMode ? 'bg-green-500' : 'bg-emerald-500'}`}></span>
+              <span className={`text-[10px] ${terminalMode ? 'text-green-800' : 'text-slate-400'}`}>Online | Kz.tutorial</span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2">
-           {/* DISPLAY CREDIT */}
-           <div className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full border shadow-inner mr-0.5 sm:mr-1 ${settings.terminalMode ? 'bg-black border-green-800' : 'bg-slate-800/80 border-slate-700/50'}`}>
-             <Coins size={14} className="text-yellow-400" />
-             <span className="text-xs font-bold text-yellow-400">{userCredits}</span>
-             <span className="text-[10px] text-slate-500 font-medium hidden sm:inline">Kredit</span>
+        <div className="flex items-center gap-1.5 md:gap-2">
+           <div className={`flex items-center gap-1 px-2.5 py-1.5 border ${
+             terminalMode 
+               ? 'bg-black border-green-800 rounded-none' 
+               : 'bg-slate-800/80 border-slate-700/50 rounded-full'
+           }`}>
+             <Coins size={14} className={terminalMode ? "text-green-500" : "text-yellow-400"} />
+             <span className={`text-xs font-bold ${terminalMode ? 'text-green-500' : 'text-yellow-400'}`}>{userCredits}</span>
            </div>
 
-           {/* INBOX (BELL ICON YANG ANIMASI) */}
-           <button 
-             onClick={onOpenInbox} 
-             className={`p-2 sm:p-2.5 rounded-xl transition-all relative ${settings.terminalMode ? 'text-green-600 hover:text-green-400 hover:bg-green-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'} ${isRinging ? 'text-yellow-400 scale-110' : ''}`}
-           >
-             <Bell size={20} className={isRinging ? 'animate-bounce fill-yellow-400' : ''} />
+           <button onClick={onOpenInbox} className={`p-2 transition-all relative ${
+             isRinging 
+               ? (terminalMode ? 'text-green-400 scale-110' : 'text-yellow-400 scale-110') 
+               : (terminalMode ? 'text-green-700 hover:text-green-500' : 'text-slate-400 hover:text-white')
+             } ${terminalMode ? 'rounded-none' : 'rounded-xl'}`}>
+             <Bell size={18} className={isRinging ? 'animate-bounce' : ''} />
              {unreadCount > 0 && (
-               <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 rounded-full flex items-center justify-center border-2 border-[#0f172a] animate-in zoom-in">
-                 <span className="text-[9px] font-bold text-white">{unreadCount > 9 ? '9+' : unreadCount}</span>
+               <span className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 flex items-center justify-center border-2 border-slate-900 ${terminalMode ? 'bg-green-600 rounded-none' : 'bg-red-500 rounded-full'}`}>
+                 <span className="text-[8px] font-bold text-white">{unreadCount > 9 ? '9+' : unreadCount}</span>
                </span>
              )}
            </button>
 
-           {/* CLEAR CHAT */}
-           <button onClick={onClearChat} className={`p-2 sm:p-2.5 rounded-xl transition-colors ${settings.terminalMode ? 'text-green-600 hover:text-red-400' : 'text-slate-400 hover:text-red-400 hover:bg-red-500/10'}`}>
-             <Trash2 size={20} />
+           <button onClick={onClearChat} className={`p-2 transition-all ${terminalMode ? 'text-green-700 hover:text-red-500 rounded-none' : 'text-slate-400 hover:text-red-400 rounded-xl'}`} title="Hapus Chat">
+             <Trash2 size={18} />
            </button>
 
-           {/* SETTINGS */}
-           <button onClick={onOpenSettings} className={`p-2 sm:p-2.5 rounded-xl transition-all active:scale-95 ${settings.terminalMode ? 'text-green-600 hover:text-green-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
-             <Settings size={20} />
+           <button onClick={onOpenSettings} className={`p-2 transition-all ${terminalMode ? 'text-green-700 hover:text-green-500 rounded-none' : 'text-slate-400 hover:text-white rounded-xl'}`}>
+             <Settings size={18} />
            </button>
         </div>
       </header>
 
-      {/* CHAT AREA */}
-      <div ref={scrollContainerRef} onScroll={handleScroll} className={`flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth ${settings.terminalMode ? 'bg-black' : ''}`}>
+      <div 
+        ref={scrollContainerRef} 
+        onScroll={handleScroll} 
+        className={`flex-1 overflow-y-auto p-4 space-y-8 scroll-smooth ${terminalMode ? 'pb-24' : 'pb-40'} ${terminalMode ? 'bg-black' : 'bg-slate-950'}`}
+      >
         {displayMessages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-4 animate-in fade-in zoom-in duration-500">
-             <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-2 shadow-inner ring-1 ring-white/5 ${settings.terminalMode ? 'bg-green-900/20' : 'bg-slate-800/50'}`}>
-                <BlinkingBot size={32} className={settings.terminalMode ? 'text-green-500' : 'text-blue-500'} />
-             </div>
-             <p className={`text-sm font-medium ${settings.terminalMode ? 'text-green-600' : 'text-slate-400'}`}>Siap membantu coding & diskusi santai.</p>
+          <div className="h-full flex flex-col items-center justify-center px-6 text-center animate-in fade-in zoom-in duration-700">
+            <div className={`w-20 h-20 mb-6 flex items-center justify-center ${terminalMode ? 'bg-black border-2 border-green-500 rounded-none' : 'bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-2xl'}`}>
+              <BlinkingBot size={40} className={terminalMode ? "text-green-500" : "text-white"} />
+            </div>
+            
+            <div className={`max-w-md space-y-4 ${terminalMode ? 'font-mono text-green-500' : 'text-slate-300'}`}>
+              <h2 className="text-xl font-black tracking-tight">
+                Wih, ada member baru nih! <br/>
+                Selamat datang di <span className={terminalMode ? "underline" : "text-blue-400"}>KztutorialAI</span>, Bro! 🥳
+              </h2>
+              <p className="text-sm leading-relaxed opacity-80">
+                Gue partner koding lu di sini. Apapun kendala lu soal Termux, Python, atau project lainnya, langsung gas tanya aja.
+              </p>
+              <div className={`p-3 text-xs border ${terminalMode ? 'border-green-900 bg-black' : 'bg-slate-900/50 border-slate-800 rounded-xl'}`}>
+                Kredit lu udah siap dipake buat tempur. Jangan lupa mampir ke channel YouTube 
+                <span className="font-bold text-blue-400 ml-1">Kz.tutorial</span> ya!
+              </div>
+              <p className="text-xs font-bold animate-pulse pt-4">
+                {terminalMode ? '> SIAP EKSEKUSI PROJECT APA HARI INI?' : 'Jadi, project apa yang mau kita eksekusi hari ini?'}
+              </p>
+            </div>
           </div>
         )}
 
         {displayMessages.map((msg, index) => {
           const isUser = msg.role === 'user';
           const { hasReasoning, reasoning, finalAnswer } = parseMessageContent(msg.content);
+          const { cleanContent, sources, actions, stats } = !isUser ? parseSpecialTags(finalAnswer) : { cleanContent: finalAnswer, sources: [], actions: [], stats: null };
+
           const isStreamingMsg = isLoading && index === displayMessages.length - 1 && !isUser;
           const showActions = !isUser && index === displayMessages.length - 1 && !isLoading;
+          
+          // UI LOGIC UPDATE: Safety Net agar tombol Action hanya muncul jika kredit BENAR-BENAR < 5 (Client check)
+          const showTopUpButton = !isUser && actions.includes('OPEN_TOPUP') && userCredits < 5;
 
           return (
-            <div key={msg.id} className={`flex flex-col w-full mb-4 ${isUser ? 'items-end' : 'items-start'}`}>
-              <div className={`flex gap-3 max-w-[95%] md:max-w-3xl ${isUser ? 'flex-row-reverse' : ''}`}>
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm ring-1 ring-white/5 ${isUser ? 'bg-blue-600' : settings.terminalMode ? 'bg-green-900 text-green-200' : 'bg-slate-800 border border-slate-700'}`}>
-                  {isUser ? <User size={16} className="text-white" /> : <Bot size={18} className={settings.terminalMode ? 'text-green-400' : 'text-blue-400'} />}
+            <div key={msg.id} className={`flex flex-col w-full ${isUser ? 'items-end' : 'items-start animate-in fade-in slide-in-from-left-2 duration-300'}`}>
+              <div className={`flex gap-3 w-full ${isUser ? 'flex-row-reverse' : ''}`}>
+                <div className={`w-8 h-8 flex items-center justify-center flex-shrink-0 mt-1 ${
+                  isUser 
+                    ? (terminalMode ? 'bg-black border border-green-500 text-green-500 rounded-none' : 'bg-blue-600 rounded-lg shadow-sm text-white')
+                    : (terminalMode ? 'bg-black border border-green-800 text-green-500 rounded-none' : 'bg-slate-800 border border-slate-700 rounded-lg shadow-sm text-blue-400')
+                }`}>
+                  {isUser ? <User size={16} /> : <Bot size={18} />}
                 </div>
 
-                <div className={`flex flex-col min-w-0 ${isUser ? 'items-end' : 'items-start'} w-full`}>
-                   {isStreamingMsg && !msg.content ? <ThinkingIndicator /> : (
-                     <div className={`text-sm leading-relaxed shadow-sm relative px-5 py-4 ${isUser ? 'bg-blue-600 text-white rounded-2xl rounded-tr-none' : settings.terminalMode ? 'bg-black border border-green-500/50 text-green-400 rounded-none font-mono' : 'bg-[#1e1e1e] border border-slate-700/60 text-slate-300 rounded-2xl rounded-tl-none pb-4'}`}>
-                        {!isUser && hasReasoning && <ReasoningAccordion reasoning={reasoning} isStreaming={isStreamingMsg} />}
+                <div className={`flex flex-col min-w-0 flex-1 ${isUser ? 'items-end' : 'items-start'}`}>
+                   {!isUser && (
+                     <span className={`text-[10px] font-bold mb-1.5 ml-1 uppercase tracking-widest ${terminalMode ? 'text-green-700' : 'text-blue-400'}`}>
+                       AI ASISTEN
+                     </span>
+                   )}
+                   {isStreamingMsg && !msg.content ? <ThinkingIndicator isTerminal={terminalMode} /> : (
+                     <div className={`w-full ${isUser ? 'flex flex-col items-end' : 'text-slate-300 py-1'}`}>
                         
-                        {isUser ? renderUserMessage(msg.content) : <MarkdownRenderer content={finalAnswer} />}
+                        {!isUser && hasReasoning && <ReasoningAccordion reasoning={reasoning} isStreaming={isStreamingMsg} isTerminal={terminalMode} />}
                         
+                        {isUser ? renderUserMessage(msg.content) : (
+                          <div className={`w-full max-w-full overflow-hidden break-words ${terminalMode ? 'text-green-500' : ''}`}>
+                            <MarkdownRenderer content={cleanContent} isTerminal={terminalMode} />
+                          </div>
+                        )}
+
+                        {!isUser && sources.length > 0 && (
+                          <div className="mt-4 mb-2 animate-in fade-in slide-in-from-bottom-2">
+                             <div className="flex flex-wrap gap-2 overflow-x-auto pb-2 scrollbar-none">
+                               {sources.map((src, i) => (
+                                 <SourceCard key={i} title={src.title} url={src.url} isTerminal={terminalMode} />
+                               ))}
+                             </div>
+                          </div>
+                        )}
+
+                        {showTopUpButton && (
+                          <div className="mt-3 animate-in fade-in slide-in-from-bottom-3">
+                             <button 
+                               onClick={onOpenTopUp}
+                               className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm shadow-lg transition-all active:scale-95 ${
+                                 terminalMode 
+                                 ? 'bg-black border border-green-500 text-green-500 hover:bg-green-900/30' 
+                                 : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-blue-500/25'
+                               }`}
+                             >
+                               <CreditCard size={16} />
+                               Isi Kredit Sekarang
+                             </button>
+                          </div>
+                        )}
+                        
+                        {!isUser && stats && (
+                           <div className={`mt-3 pt-2 border-t w-full max-w-sm ${terminalMode ? 'border-green-900' : 'border-slate-800'}`}>
+                             <div className="flex items-center justify-between text-[10px] font-mono opacity-80">
+                               <div className="flex items-center gap-1.5">
+                                 <div className={`w-2 h-2 rounded-full ${terminalMode ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                                 <span className={terminalMode ? "text-green-700" : "text-slate-500"}>DEV STATS</span>
+                               </div>
+                               <span className={terminalMode ? "text-green-600" : "text-blue-400"}>{stats}</span>
+                             </div>
+                           </div>
+                        )}
+
                         {!isUser && !isStreamingMsg && (
                           <>
-                            <MessageActions content={finalAnswer} />
-                            {showActions && <SuggestedActions lastMessage={finalAnswer} onAction={(text) => onSendMessage(text, false)} />}
+                            <MessageActions content={cleanContent} isTerminal={terminalMode} />
+                            {showActions && <SuggestedActions lastMessage={cleanContent} onAction={(text) => onSendMessage(text, false)} isTerminal={terminalMode} />}
                           </>
                         )}
                      </div>
                    )}
-
-                   {/* --- MESSAGE METADATA (Timestamp & Status) --- */}
                    {!isStreamingMsg && (
-                     <div className={`flex items-center gap-1.5 mt-1.5 px-1 select-none ${isUser ? 'justify-end' : 'justify-start'} ${settings.terminalMode ? 'text-green-800' : 'text-slate-500'}`}>
-                        <span className="text-[10px] font-medium tracking-wide font-mono">
+                     <div className={`flex items-center gap-1.5 mt-1.5 px-1 ${isUser ? 'justify-end' : 'justify-start'} ${terminalMode ? 'text-green-800' : 'text-slate-500'}`}>
+                        <span className="text-[10px] font-mono">
                           {new Date(msg.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
-                        {isUser && (
-                          <div className="flex items-center" title="Terkirim">
-                             <Check size={12} strokeWidth={3} className={settings.terminalMode ? "text-green-600" : "text-blue-500"} />
-                          </div>
-                        )}
+                        {isUser && <Check size={12} strokeWidth={3} className={terminalMode ? "text-green-600" : "text-blue-500"} />}
                      </div>
                    )}
                 </div>
@@ -420,152 +614,101 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
           );
         })}
-        <div className="h-6" /> 
       </div>
 
       {showScrollButton && (
-        <button onClick={() => scrollToBottom(true)} className="absolute bottom-32 right-6 bg-blue-600 text-white p-3 rounded-full shadow-xl hover:scale-110 transition-transform z-20 animate-in fade-in slide-in-from-bottom-2"><ArrowDown size={20} /></button>
+        <button onClick={() => scrollToBottom(true)} className={`absolute bottom-32 right-6 p-3 shadow-xl hover:scale-110 transition-all z-20 ${
+          terminalMode 
+            ? 'bg-black border border-green-500 text-green-500 rounded-none' 
+            : 'bg-blue-600 text-white rounded-full'
+        }`}>
+          <ArrowDown size={20} />
+        </button>
       )}
 
-      {/* --- INPUT AREA DENGAN UI BARU --- */}
-      <div className={`backdrop-blur-lg pb-3 pt-1 px-3 border-t ${settings.terminalMode ? 'bg-black/90 border-green-900' : 'bg-slate-900/90 border-slate-800/80'}`}>
-        
-        {/* INFO BIAYA KREDIT (MODE ANALISIS) */}
-        {isAnalysisMode && (
-          <div className="flex justify-center mb-2 animate-in slide-in-from-bottom-2 fade-in">
-             <div className="flex items-center gap-2 bg-purple-900/60 border border-purple-500/30 px-3 py-1 rounded-full backdrop-blur-md shadow-lg shadow-purple-900/20">
-                <Sparkles size={12} className="text-purple-300 animate-pulse" />
-                <span className="text-[10px] font-bold text-purple-200">Mode Analisis: Logika Mendalam</span>
-                <span className="text-[10px] font-bold text-yellow-400 bg-black/30 px-1.5 rounded border border-yellow-500/20">-2 Kredit</span>
+      {terminalMode ? (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-black border-t-2 border-green-500 p-3">
+          <form onSubmit={handleSubmit} className="flex items-center gap-3 max-w-7xl mx-auto">
+             <div className="flex items-center gap-2 text-green-500 font-mono font-bold whitespace-nowrap">
+               <span className="animate-pulse">{'>_'}</span>
+               <span className="hidden sm:inline">User@Termux:~#</span>
              </div>
-          </div>
-        )}
+             
+             <input
+               value={input}
+               disabled={isProfileLoading}
+               onChange={(e) => setInput(e.target.value)}
+               placeholder="Enter command..."
+               className="flex-1 bg-transparent border-none outline-none text-green-500 font-mono placeholder-green-900"
+               autoComplete="off"
+             />
 
-        {/* INFO SEARCH ACTIVE (FREE ADD-ON) */}
-        {isSearchMode && (
-          <div className="flex justify-center mb-2 animate-in slide-in-from-bottom-2 fade-in">
-             <div className="flex items-center gap-2 bg-cyan-950/80 border border-cyan-500/30 px-3 py-1 rounded-full backdrop-blur-md shadow-lg">
-                <Globe size={12} className="text-cyan-300 animate-pulse" />
-                <span className="text-[10px] font-bold text-cyan-100">Mode Internet Aktif</span>
-             </div>
-          </div>
-        )}
+             <button
+               type="button"
+               onClick={() => { setIsAnalysisMode(!isAnalysisMode); setIsSearchMode(false); }}
+               className={`p-1 ${isAnalysisMode ? 'text-green-400' : 'text-green-900 hover:text-green-600'}`}
+               title="Analysis Mode"
+             >
+               <Sparkles size={16} />
+             </button>
 
-        {/* INFO VISION ACTIVE (ANALISIS IMAGE) */}
-        {selectedImage && (
-          <div className="flex justify-center mb-2 animate-in slide-in-from-bottom-2 fade-in">
-             <div className="flex items-center gap-2 bg-purple-950/80 border border-purple-500/30 px-3 py-1.5 rounded-full backdrop-blur-md shadow-lg">
-                <Camera size={12} className="text-purple-300 animate-pulse" />
-                <span className="text-[10px] font-bold text-purple-100">Analisis Image Aktif</span>
-                <span className="text-[10px] font-bold text-yellow-400 bg-black/30 px-2 py-0.5 rounded border border-yellow-500/20">-1 Kredit</span>
-             </div>
-          </div>
-        )}
+             <button 
+                type="submit" 
+                disabled={isLoading || (!input.trim() && !selectedImage) || (!canSend && !isProfileLoading) || isProfileLoading} 
+                className={`p-1 font-mono font-bold ${
+                  !canSend ? 'text-green-900' : 'text-green-500 hover:text-green-400'
+                }`}
+              >
+                {isProfileLoading ? <Loader2 size={16} className="animate-spin"/> : '[ENTER]'}
+              </button>
+          </form>
+        </div>
+      ) : (
+        <div className="absolute bottom-4 left-4 right-4 z-50">
+          <form onSubmit={handleSubmit} className="bg-slate-900/90 backdrop-blur-lg border border-slate-700 rounded-3xl p-2 shadow-2xl flex items-center gap-2">
+            <div className="flex items-center gap-1 pl-1">
+              <button
+                type="button"
+                onClick={() => { setIsAnalysisMode(!isAnalysisMode); setIsSearchMode(false); }}
+                className={`p-2 rounded-lg transition-all ${isAnalysisMode ? 'bg-purple-600 text-white shadow-inner shadow-purple-900/40' : 'text-slate-400 hover:bg-slate-800'}`}
+                title="Mode Analisis"
+              >
+                <Sparkles size={18} />
+              </button>
+            </div>
 
-        {/* WARNING SALDO TIDAK CUKUP */}
-        {/* HANYA MUNCUL JIKA PROFIL SELESAI DIMUAT DAN SALDO TIDAK CUKUP */}
-        {!isProfileLoading && !canSend && (
-          <div className="absolute -top-12 left-0 right-0 flex justify-center animate-in slide-in-from-bottom-2 z-30 pointer-events-none">
-             <div className="bg-red-900/80 text-red-200 text-xs px-4 py-2 rounded-full border border-red-500/50 backdrop-blur shadow-lg font-bold flex items-center gap-2">
-               <AlertTriangle size={14} className="text-red-400"/>
-               Kredit Habis! Topup Dulu.
-             </div>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className={`relative flex items-end gap-2 p-2 rounded-xl border transition-all shadow-lg ${isAnalysisMode ? 'bg-slate-900 border-purple-500/50 shadow-purple-900/10' : settings.terminalMode ? 'bg-black border-green-800' : 'bg-slate-800 border-slate-700 focus-within:border-blue-500/50'}`}>
-          
-          {/* TOMBOL IMAGE UPLOAD (VISION) - UPDATED WITH PROPS */}
-          <ImageUpload 
-            previewImage={selectedImage}
-            onImageSelected={setSelectedImage} 
-            onClear={() => setSelectedImage(null)}
-            isLoading={isLoading || isProfileLoading} 
-          />
-
-          {/* TOMBOL SEARCH (GLOBE) */}
-          <button
-            type="button"
-            onClick={() => { setIsSearchMode(!isSearchMode); setIsAnalysisMode(false); setSelectedImage(null); }}
-            className={`p-2.5 rounded-lg transition-all flex-shrink-0 ${
-              isSearchMode 
-                ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-600/30' 
-                : settings.terminalMode ? 'bg-green-900/20 text-green-600 hover:text-green-400' : 'bg-slate-700/50 text-slate-400 hover:text-cyan-400 hover:bg-slate-700'
-            }`}
-            title={isSearchMode ? "Matikan Pencarian Web" : "Cari di Internet (Gratis)"}
-          >
-            <Globe size={18} className={isSearchMode ? "animate-spin-slow" : ""} />
-          </button>
-
-          {/* TOMBOL TOGGLE MODE ANALISIS */}
-          <button
-            type="button"
-            onClick={() => { setIsAnalysisMode(!isAnalysisMode); setIsSearchMode(false); setSelectedImage(null); }}
-            className={`p-2.5 rounded-lg transition-all flex-shrink-0 ${
-              isAnalysisMode 
-                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30' 
-                : settings.terminalMode ? 'bg-green-900/20 text-green-600 hover:text-green-400' : 'bg-slate-700/50 text-slate-400 hover:text-purple-400 hover:bg-slate-700'
-            }`}
-            title={isAnalysisMode ? "Matikan Mode Analisis" : "Aktifkan Mode Analisis (3 Kredit)"}
-          >
-            <Sparkles size={18} className={isAnalysisMode ? "animate-pulse" : ""} />
-          </button>
-
-          <textarea
-            ref={textareaRef}
-            value={input}
-            disabled={isProfileLoading} 
-            onChange={(e) => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${e.target.scrollHeight}px`; }}
-            placeholder={isProfileLoading ? "Memuat data profil..." : (selectedImage ? "Jelaskan gambar ini..." : isSearchMode ? "Cari info terbaru di internet..." : isAnalysisMode ? "Jelaskan masalahnya secara detail..." : "Ketik pesan...")}
-            className={`w-full max-h-32 bg-transparent text-sm px-2 py-2.5 focus:outline-none resize-none overflow-y-auto font-medium ${settings.terminalMode ? 'text-green-400 placeholder-green-800' : 'text-slate-200 placeholder-slate-500'}`}
-            rows={1}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }}
-          />
-          
-          <button 
-            type="submit" 
-            disabled={isLoading || (!input.trim() && !selectedImage) || (!canSend && !isProfileLoading) || isProfileLoading} 
-            className={`p-2.5 rounded-lg transition-all shadow-lg active:scale-95 flex-shrink-0 text-white ${
-              isProfileLoading 
-                ? 'bg-slate-700 animate-pulse cursor-wait'
-                : !canSend 
-                  ? 'bg-slate-700 cursor-not-allowed opacity-50' 
-                  : isAnalysisMode 
-                    ? 'bg-purple-600 hover:bg-purple-500 shadow-purple-900/20' 
-                    : isSearchMode 
-                      ? 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-900/20' 
-                      : settings.terminalMode 
-                        ? 'bg-green-700 hover:bg-green-600 text-black' 
-                        : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/20'
-            }`}
-            title={!canSend && !isProfileLoading ? "Saldo tidak cukup!" : "Kirim Pesan"}
-          >
-            {isProfileLoading ? <Loader2 size={18} className="animate-spin text-slate-400"/> : <Send size={18} />}
-          </button>
-        </form>
-      </div>
-
-      {/* --- FULL SCREEN IMAGE MODAL (LIGHTBOX) --- */}
-      {zoomedImage && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => setZoomedImage(null)}
-        >
-          <button 
-            className="absolute top-4 right-4 p-2 bg-slate-800 text-white rounded-full hover:bg-slate-700 transition-colors"
-            onClick={() => setZoomedImage(null)}
-          >
-            <X size={24} />
-          </button>
-          <img 
-            src={zoomedImage} 
-            alt="Full Preview" 
-            className="max-w-full max-h-full object-contain rounded shadow-2xl animate-in zoom-in-95 duration-300"
-            onClick={(e) => e.stopPropagation()} // Mencegah tutup saat klik gambar
-          />
+            <textarea
+              ref={textareaRef}
+              value={input}
+              disabled={isProfileLoading} 
+              onChange={(e) => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${e.target.scrollHeight}px`; }}
+              placeholder={isProfileLoading ? "Memuat data..." : "Ketik pesan..."}
+              className="flex-1 max-h-32 bg-transparent text-sm px-3 py-2 border-none focus:ring-0 text-white placeholder-slate-400 resize-none overflow-y-auto"
+              rows={1}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }}
+            />
+            
+            <div className="pr-1">
+              <button 
+                type="submit" 
+                disabled={isLoading || (!input.trim() && !selectedImage) || (!canSend && !isProfileLoading) || isProfileLoading} 
+                className={`p-2.5 rounded-xl transition-all shadow-md active:scale-90 flex-shrink-0 text-white ${
+                  !canSend ? 'bg-slate-700 opacity-50' : 'bg-blue-600 hover:bg-blue-500'
+                }`}
+              >
+                {isProfileLoading ? <Loader2 size={18} className="animate-spin text-slate-400"/> : <Send size={20} />}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
+      {zoomedImage && (
+        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setZoomedImage(null)}>
+          <button className="absolute top-6 right-6 p-2 bg-slate-800 text-white rounded-full transition-transform active:scale-90"><X size={24} /></button>
+          <img src={zoomedImage} alt="Full" className="max-w-full max-h-full object-contain rounded animate-in zoom-in-95" />
+        </div>
+      )}
     </div>
   );
 };

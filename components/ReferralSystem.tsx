@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Users, Copy, Check, Gift, Sparkles, AlertTriangle } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
@@ -74,7 +75,6 @@ export const ReferralSystem: React.FC<ReferralSystemProps> = ({ userId, onCredit
         setInputCode('');
       } else {
         // TAMPILKAN PESAN ERROR DARI SERVER (YANG SUDAH DISAMARKAN)
-        // Penuyul akan bingung karena errornya terlihat generik (S-99, dll)
         alert("PEMBERITAHUAN SISTEM: " + result.message);
       }
     } catch (err: any) {
@@ -110,15 +110,15 @@ export const ReferralSystem: React.FC<ReferralSystemProps> = ({ userId, onCredit
             Kode Referral Saya
           </label>
           <div className="flex gap-2">
-            <div className="flex-1 bg-black/40 border border-slate-600 border-dashed rounded px-3 py-2 text-center font-mono text-lg tracking-widest text-white font-bold select-all">
+            <div className="flex-1 bg-black/40 border border-slate-600 border-dashed rounded px-3 py-2 text-center font-mono text-lg tracking-widest text-white font-bold select-all overflow-hidden truncate">
               {myCode}
             </div>
             <button 
               onClick={handleCopy}
-              className={`px-4 rounded-lg font-bold text-xs flex items-center gap-2 transition-all ${copied ? 'bg-green-500 text-white' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
+              className={`shrink-0 px-4 rounded-lg font-bold text-xs flex items-center gap-2 transition-all ${copied ? 'bg-green-500 text-white' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
             >
               {copied ? <Check size={16}/> : <Copy size={16}/>}
-              {copied ? 'Disalin' : 'Salin'}
+              <span className="hidden sm:inline">{copied ? 'Disalin' : 'Salin'}</span>
             </button>
           </div>
           
@@ -136,18 +136,18 @@ export const ReferralSystem: React.FC<ReferralSystemProps> = ({ userId, onCredit
              <label className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-2 block">
                Punya Kode Teman?
              </label>
-             <div className="flex gap-2">
+             <div className="flex items-center gap-2 p-1.5 bg-slate-900/50 border border-slate-700 rounded-xl mt-2">
                <input 
                  type="text" 
                  value={inputCode}
                  onChange={(e) => setInputCode(e.target.value.toUpperCase())}
                  placeholder="Masukan kode..."
-                 className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none placeholder-slate-600 font-mono"
+                 className="flex-1 bg-transparent border-none px-2 py-1 text-sm text-white focus:outline-none placeholder-slate-600 font-mono"
                />
                <button 
                  onClick={handleClaim}
                  disabled={loading || !inputCode}
-                 className="bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 rounded-lg font-bold text-xs flex items-center gap-1 shadow-lg shadow-green-900/20 transition-all active:scale-95"
+                 className="shrink-0 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors shadow-lg active:scale-95 whitespace-nowrap flex items-center gap-2"
                >
                  {loading ? '...' : <><Gift size={14}/> Klaim</>}
                </button>
