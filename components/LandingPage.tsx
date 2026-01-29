@@ -1,6 +1,5 @@
-
 import React, { useEffect, useRef } from 'react';
-import { Code2, Zap, Globe, Cpu, ArrowRight, CheckCircle, Terminal } from 'lucide-react';
+import { Code2, Zap, Globe, Cpu, ArrowRight, CheckCircle, Terminal, Youtube } from 'lucide-react';
 
 interface LandingPageProps {
   onLoginClick: () => void;
@@ -224,6 +223,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onNaviga
               <button onClick={() => onNavigate('privacy')} className="hover:text-blue-400 transition-colors">Privacy</button>
               <button onClick={() => onNavigate('terms')} className="hover:text-blue-400 transition-colors">Terms</button>
               <button onClick={() => onNavigate('help')} className="hover:text-blue-400 transition-colors">Help</button>
+          </div>
+          <div className="mb-4">
+            <a href="https://www.youtube.com/@Kz.tutorial" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-red-600/10 hover:bg-red-600/20 text-red-500 rounded-full transition-colors font-medium text-xs">
+              <Youtube size={14} /> Subscribe Kz.tutorial
+            </a>
           </div>
           <p>&copy; {new Date().getFullYear()} Kz.tutorial AI. Built for Developers.</p>
         </footer>

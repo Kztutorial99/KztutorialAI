@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
-import { Send, Bot, User, Code2, Settings, Zap, Terminal, AlertTriangle, FileCode, Sparkles, BrainCircuit, ArrowDown, ChevronDown, Coins, Bell, Trash2, Check, Copy, Share2, ThumbsUp, ThumbsDown, Globe, Camera, Maximize2, X, Loader2, Link as LinkIcon, ExternalLink, CreditCard } from 'lucide-react';
+import { Send, Bot, User, Code2, Settings, Zap, Terminal, AlertTriangle, FileCode, Sparkles, BrainCircuit, ArrowDown, ChevronDown, Coins, Bell, Trash2, Check, Copy, Share2, ThumbsUp, ThumbsDown, Globe, Camera, Maximize2, X, Loader2, Link as LinkIcon, ExternalLink, CreditCard, Crown, Star, Clock } from 'lucide-react';
 import { Message, AppSettings } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
 import { ImageUpload } from './ImageUpload';
+import { useAuth } from '../contexts/AuthContext'; 
 
 interface ChatInterfaceProps {
   messages: Message[];
@@ -17,6 +18,7 @@ interface ChatInterfaceProps {
   error: string | null;
   userCredits: number;
   isProfileLoading: boolean;
+  cooldownTimer?: number; // New Prop
 }
 
 const BlinkingBot = ({ className, size = 24 }: { className?: string, size?: number }) => (
@@ -237,7 +239,7 @@ const parseSpecialTags = (content: string) => {
     if (match[1]) actions.push(match[1].trim());
   }
 
-  // 3. Stats
+  // 3. Stats (Legacy, ignored in new logic)
   const statsRegex = /\[STATS:\s*(.*?)\]/g;
   let stats = null;
   match = statsRegex.exec(content);
@@ -305,8 +307,9 @@ const ReasoningAccordion: React.FC<{ reasoning: string; isStreaming: boolean; is
 };
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
-  messages, isLoading, onSendMessage, onClearChat, onOpenSettings, onOpenInbox, onOpenTopUp, unreadCount, settings, error, userCredits, isProfileLoading 
+  messages, isLoading, onSendMessage, onClearChat, onOpenSettings, onOpenInbox, onOpenTopUp, unreadCount, settings, error, isProfileLoading, cooldownTimer = 0 
 }) => {
+  const { profile } = useAuth(); // Access profile directly
   const [input, setInput] = useState('');
   const [isAnalysisMode, setIsAnalysisMode] = useState(false);
   const [isSearchMode, setIsSearchMode] = useState(false);
@@ -319,14 +322,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [isRinging, setIsRinging] = useState(false);
   const prevUnreadCountRef = useRef(unreadCount);
   
+  // NEW STATE FOR LIMIT POPUP
+  const [showLimitPopup, setShowLimitPopup] = useState(false);
+  
   const prevLoadingRef = useRef(isLoading);
   const { terminalMode } = settings;
 
-  let currentCost = 1;
-  if (isAnalysisMode) currentCost = 2;
-  if (selectedImage) currentCost = 1;
-
-  const canSend = userCredits >= currentCost;
+  // SUBSCRIPTION CHECK LOGIC
+  const isPremium = profile?.is_premium && profile.premium_until && new Date(profile.premium_until) > new Date();
+  const dailyUsage = profile?.daily_usage || 0;
+  const isLimitReached = !isPremium && dailyUsage >= 20;
+  const isCooldown = cooldownTimer > 0;
 
   useEffect(() => {
     if (unreadCount > prevUnreadCountRef.current) {
@@ -379,7 +385,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!input.trim() && !selectedImage) || isLoading || (!canSend && !isProfileLoading) || isProfileLoading) return;
+    if ((!input.trim() && !selectedImage) || isLoading || isProfileLoading || isCooldown) return;
+    
+    // CUSTOM UI FOR LIMIT REACHED
+    if (isLimitReached) {
+      setShowLimitPopup(true);
+      setTimeout(() => setShowLimitPopup(false), 5000); // Auto hide after 5s
+      return;
+    }
     
     onSendMessage(input, isAnalysisMode, isSearchMode, selectedImage || undefined);
     
@@ -454,13 +467,27 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 md:gap-2">
-           <div className={`flex items-center gap-1 px-2.5 py-1.5 border ${
+           {/* SUBSCRIPTION STATUS INDICATOR */}
+           <div 
+             onClick={onOpenTopUp}
+             className={`flex items-center gap-1 px-2.5 py-1.5 border cursor-pointer hover:opacity-80 transition-opacity ${
              terminalMode 
                ? 'bg-black border-green-800 rounded-none' 
-               : 'bg-slate-800/80 border-slate-700/50 rounded-full'
+               : (isPremium ? 'bg-gradient-to-r from-purple-900/50 to-blue-900/50 border-purple-500/30 rounded-full' : 'bg-slate-800/80 border-slate-700/50 rounded-full')
            }`}>
-             <Coins size={14} className={terminalMode ? "text-green-500" : "text-yellow-400"} />
-             <span className={`text-xs font-bold ${terminalMode ? 'text-green-500' : 'text-yellow-400'}`}>{userCredits}</span>
+             {isPremium ? (
+               <>
+                 <Crown size={14} className={terminalMode ? "text-green-500" : "text-yellow-400"} fill="currentColor" />
+                 <span className={`text-xs font-bold ${terminalMode ? 'text-green-500' : 'text-yellow-400'}`}>PREMIUM</span>
+               </>
+             ) : (
+               <>
+                 <Coins size={14} className={terminalMode ? "text-green-500" : "text-slate-400"} />
+                 <span className={`text-xs font-bold ${terminalMode ? 'text-green-500' : 'text-slate-300'}`}>
+                    {20 - dailyUsage}/20 Free
+                 </span>
+               </>
+             )}
            </div>
 
            <button onClick={onOpenInbox} className={`p-2 transition-all relative ${
@@ -499,16 +526,20 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             
             <div className={`max-w-md space-y-4 ${terminalMode ? 'font-mono text-green-500' : 'text-slate-300'}`}>
               <h2 className="text-xl font-black tracking-tight">
-                Wih, ada member baru nih! <br/>
+                {isPremium && <>Mode PREMIUM Aktif! 🚀<br/></>}
                 Selamat datang di <span className={terminalMode ? "underline" : "text-blue-400"}>KztutorialAI</span>, Bro! 🥳
               </h2>
               <p className="text-sm leading-relaxed opacity-80">
-                Gue partner koding lu di sini. Apapun kendala lu soal Termux, Python, atau project lainnya, langsung gas tanya aja.
+                Gue partner koding di sini. Apapun kendala soal Termux, Python, atau project lainnya, langsung gas tanya aja.
               </p>
-              <div className={`p-3 text-xs border ${terminalMode ? 'border-green-900 bg-black' : 'bg-slate-900/50 border-slate-800 rounded-xl'}`}>
-                Kredit lu udah siap dipake buat tempur. Jangan lupa mampir ke channel YouTube 
-                <span className="font-bold text-blue-400 ml-1">Kz.tutorial</span> ya!
-              </div>
+              
+              {!isPremium && (
+                <div className={`p-3 text-xs border ${terminalMode ? 'border-green-900 bg-black' : 'bg-slate-900/50 border-slate-800 rounded-xl'}`}>
+                  Limit harian sisa <span className="font-bold text-yellow-400">{20 - dailyUsage}</span>. 
+                  Mau unlimited? <button onClick={onOpenTopUp} className="text-blue-400 font-bold hover:underline">Upgrade Premium</button>
+                </div>
+              )}
+              
               <p className="text-xs font-bold animate-pulse pt-4">
                 {terminalMode ? '> SIAP EKSEKUSI PROJECT APA HARI INI?' : 'Jadi, project apa yang mau kita eksekusi hari ini?'}
               </p>
@@ -524,9 +555,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           const isStreamingMsg = isLoading && index === displayMessages.length - 1 && !isUser;
           const showActions = !isUser && index === displayMessages.length - 1 && !isLoading;
           
-          // UI LOGIC UPDATE: Safety Net agar tombol Action hanya muncul jika kredit BENAR-BENAR < 5 (Client check)
-          const showTopUpButton = !isUser && actions.includes('OPEN_TOPUP') && userCredits < 5;
-
           return (
             <div key={msg.id} className={`flex flex-col w-full ${isUser ? 'items-end' : 'items-start animate-in fade-in slide-in-from-left-2 duration-300'}`}>
               <div className={`flex gap-3 w-full ${isUser ? 'flex-row-reverse' : ''}`}>
@@ -565,34 +593,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                           </div>
                         )}
 
-                        {showTopUpButton && (
-                          <div className="mt-3 animate-in fade-in slide-in-from-bottom-3">
-                             <button 
-                               onClick={onOpenTopUp}
-                               className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm shadow-lg transition-all active:scale-95 ${
-                                 terminalMode 
-                                 ? 'bg-black border border-green-500 text-green-500 hover:bg-green-900/30' 
-                                 : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-blue-500/25'
-                               }`}
-                             >
-                               <CreditCard size={16} />
-                               Isi Kredit Sekarang
-                             </button>
-                          </div>
-                        )}
-                        
-                        {!isUser && stats && (
-                           <div className={`mt-3 pt-2 border-t w-full max-w-sm ${terminalMode ? 'border-green-900' : 'border-slate-800'}`}>
-                             <div className="flex items-center justify-between text-[10px] font-mono opacity-80">
-                               <div className="flex items-center gap-1.5">
-                                 <div className={`w-2 h-2 rounded-full ${terminalMode ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                                 <span className={terminalMode ? "text-green-700" : "text-slate-500"}>DEV STATS</span>
-                               </div>
-                               <span className={terminalMode ? "text-green-600" : "text-blue-400"}>{stats}</span>
-                             </div>
-                           </div>
-                        )}
-
                         {!isUser && !isStreamingMsg && (
                           <>
                             <MessageActions content={cleanContent} isTerminal={terminalMode} />
@@ -626,6 +626,27 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </button>
       )}
 
+      {/* LIMIT REACHED POPUP */}
+      {showLimitPopup && (
+        <div className={`absolute bottom-20 left-4 right-4 z-50 animate-in slide-in-from-bottom-5 duration-300 ${terminalMode ? 'bg-black border border-green-500' : 'bg-slate-900 border border-slate-700'} p-4 rounded-xl shadow-2xl flex items-center justify-between gap-4`}>
+          <div className="flex items-center gap-3">
+             <div className="p-2 bg-red-500/20 text-red-500 rounded-full">
+               <AlertTriangle size={20} />
+             </div>
+             <div>
+               <h4 className={`font-bold text-sm ${terminalMode ? 'text-green-500' : 'text-white'}`}>Limit Harian Habis</h4>
+               <p className="text-xs text-slate-400">Kuota 20 chat tercapai. Upgrade untuk lanjut.</p>
+             </div>
+          </div>
+          <button 
+            onClick={onOpenTopUp}
+            className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${terminalMode ? 'bg-green-600 text-black hover:bg-green-500' : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-lg'}`}
+          >
+            Upgrade Premium
+          </button>
+        </div>
+      )}
+
       {terminalMode ? (
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-black border-t-2 border-green-500 p-3">
           <form onSubmit={handleSubmit} className="flex items-center gap-3 max-w-7xl mx-auto">
@@ -636,9 +657,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
              
              <input
                value={input}
-               disabled={isProfileLoading}
+               disabled={isProfileLoading || isCooldown}
                onChange={(e) => setInput(e.target.value)}
-               placeholder="Enter command..."
+               placeholder={isCooldown ? `Cooling down... ${cooldownTimer}s` : (isLimitReached ? "Limit Habis. Ketik untuk Info..." : "Enter command...")}
                className="flex-1 bg-transparent border-none outline-none text-green-500 font-mono placeholder-green-900"
                autoComplete="off"
              />
@@ -654,12 +675,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
              <button 
                 type="submit" 
-                disabled={isLoading || (!input.trim() && !selectedImage) || (!canSend && !isProfileLoading) || isProfileLoading} 
+                disabled={isLoading || (!input.trim() && !selectedImage) || isProfileLoading || isCooldown} 
                 className={`p-1 font-mono font-bold ${
-                  !canSend ? 'text-green-900' : 'text-green-500 hover:text-green-400'
+                  isLimitReached || isCooldown ? 'text-red-900' : 'text-green-500 hover:text-green-400'
                 }`}
               >
-                {isProfileLoading ? <Loader2 size={16} className="animate-spin"/> : '[ENTER]'}
+                {isProfileLoading ? <Loader2 size={16} className="animate-spin"/> : isCooldown ? `${cooldownTimer}` : '[ENTER]'}
               </button>
           </form>
         </div>
@@ -667,6 +688,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <div className="absolute bottom-4 left-4 right-4 z-50">
           <form onSubmit={handleSubmit} className="bg-slate-900/90 backdrop-blur-lg border border-slate-700 rounded-3xl p-2 shadow-2xl flex items-center gap-2">
             <div className="flex items-center gap-1 pl-1">
+              <ImageUpload 
+                previewImage={selectedImage} 
+                onImageSelected={setSelectedImage} 
+                onClear={() => setSelectedImage(null)} 
+                isLoading={isLoading || isProfileLoading || isCooldown} 
+              />
               <button
                 type="button"
                 onClick={() => { setIsAnalysisMode(!isAnalysisMode); setIsSearchMode(false); }}
@@ -680,9 +707,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <textarea
               ref={textareaRef}
               value={input}
-              disabled={isProfileLoading} 
+              disabled={isProfileLoading || isCooldown} 
               onChange={(e) => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${e.target.scrollHeight}px`; }}
-              placeholder={isProfileLoading ? "Memuat data..." : "Ketik pesan..."}
+              placeholder={isProfileLoading ? "Memuat..." : (isCooldown ? `Tunggu ${cooldownTimer} detik...` : (isLimitReached ? "Limit Habis. Ketik untuk Info..." : "Ketik pesan..."))}
               className="flex-1 max-h-32 bg-transparent text-sm px-3 py-2 border-none focus:ring-0 text-white placeholder-slate-400 resize-none overflow-y-auto"
               rows={1}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }}
@@ -691,12 +718,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <div className="pr-1">
               <button 
                 type="submit" 
-                disabled={isLoading || (!input.trim() && !selectedImage) || (!canSend && !isProfileLoading) || isProfileLoading} 
-                className={`p-2.5 rounded-xl transition-all shadow-md active:scale-90 flex-shrink-0 text-white ${
-                  !canSend ? 'bg-slate-700 opacity-50' : 'bg-blue-600 hover:bg-blue-500'
+                disabled={isLoading || (!input.trim() && !selectedImage) || isProfileLoading || isCooldown} 
+                className={`p-2.5 rounded-xl transition-all shadow-md active:scale-90 flex-shrink-0 text-white min-w-[44px] flex items-center justify-center ${
+                  (isLimitReached && input.trim()) ? 'bg-red-600 hover:bg-red-500 animate-pulse' : (isLimitReached ? 'bg-slate-700 opacity-50 cursor-not-allowed' : (isCooldown ? 'bg-slate-700 opacity-50' : 'bg-blue-600 hover:bg-blue-500'))
                 }`}
               >
-                {isProfileLoading ? <Loader2 size={18} className="animate-spin text-slate-400"/> : <Send size={20} />}
+                {isProfileLoading ? <Loader2 size={18} className="animate-spin text-slate-400"/> : isCooldown ? <span className="text-xs font-bold">{cooldownTimer}</span> : <Send size={20} />}
               </button>
             </div>
           </form>

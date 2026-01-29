@@ -1,12 +1,10 @@
-
-import { Message, ApiKeys } from '../types';
 import { supabase } from './supabaseClient';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 // --- KONFIGURASI MODEL ---
-const FAST_MODEL = 'llama-3.1-8b-instant';       // Default
-const SMART_MODEL = 'llama-3.3-70b-versatile';   // Coding Kompleks
+const FAST_MODEL = 'llama-3.1-8b-instant';       
+const SMART_MODEL = 'llama-3.3-70b-versatile';  
 
 // --- KEYWORDS DETECTOR ---
 const COMPLEX_TASK_KEYWORDS = [
@@ -22,11 +20,8 @@ const NEGATIVE_EMOTION_KEYWORDS = [
 ];
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-let currentKeyIndex = 0;
 
-/**
- * 1. TIME HELPER
- */
+/** 1. TIME HELPER */
 function getTimeContext(): string {
   const now = new Date();
   const userLocalTime = now.toLocaleString('id-ID', { 
@@ -37,9 +32,7 @@ function getTimeContext(): string {
   return `[WAKTU: ${userLocalTime}. Sapa "${greeting}" HANYA jika ini pesan pertama.]`;
 }
 
-/**
- * 2. MOOD ANALYZER
- */
+/** 2. MOOD ANALYZER */
 function detectMoodAndConstructPrompt(lastMessage: string): string {
   const lowerMsg = lastMessage.toLowerCase();
   const isStressed = NEGATIVE_EMOTION_KEYWORDS.some(word => lowerMsg.includes(word));
@@ -49,11 +42,8 @@ function detectMoodAndConstructPrompt(lastMessage: string): string {
   return "";
 }
 
-/**
- * 3. COMPLEXITY ANALYZER
- */
-function selectOptimalModel(lastMessage: string, isImageAnalysis: boolean): string {
-  if (isImageAnalysis) return SMART_MODEL;
+/** 3. COMPLEXITY ANALYZER */
+function selectOptimalModel(lastMessage: string): string {
   const lowerMsg = lastMessage.toLowerCase();
   const isComplex = COMPLEX_TASK_KEYWORDS.some(keyword => lowerMsg.includes(keyword)) || 
                     lowerMsg.includes('```') || 
@@ -61,12 +51,10 @@ function selectOptimalModel(lastMessage: string, isImageAnalysis: boolean): stri
   return isComplex ? SMART_MODEL : FAST_MODEL;
 }
 
-/**
- * 4. MEMORY FETCHING
- */
+/** 4. MEMORY FETCHING */
 async function fetchUserMemories(userId: string): Promise<string[]> {
   try {
-    const { data, error } = await supabase.from('user_memories').select('memories').eq('user_id', userId).single();
+    const { data } = await supabase.from('user_memories').select('memories').eq('user_id', userId).single();
     return data && Array.isArray(data.memories) ? data.memories : [];
   } catch { return []; }
 }
@@ -76,172 +64,200 @@ async function saveUserMemory(userId: string, fact: string) {
   catch (err) { console.error("[Memory] Save failed:", err); }
 }
 
-/**
- * --- MAIN STREAMING FUNCTION ---
- */
+/** * --- MAIN STREAMING FUNCTION --- */
 export async function* streamGroqRequest(
   messages: any[], 
-  keys: ApiKeys, 
+  _unusedKeys: any, 
   initialModelId: string = FAST_MODEL, 
   userId: string,
-  userCredits: number = 0 
+  userCredits: number = 0 // Legacy param, ignored logic
 ) {
-  if (!keys || keys.length === 0) throw new Error("API Key kosong.");
+  
+  // A. FETCH API KEYS DARI SUPABASE (Smart Rotation)
+  const { data: dbKeys, error: dbError } = await supabase
+    .from('api_key_usage') 
+    .select('*')
+    .order('usage_count', { ascending: true });
 
-  // A. PREPARE CONTEXT & COST CALCULATION (CRITICAL SYNC)
+  if (dbError || !dbKeys || dbKeys.length === 0) {
+    throw new Error("Gagal mengambil API Key dari server.");
+  }
+
+  // B. CHECK SUBSCRIPTION LIMIT (CORE LOGIC CHANGE)
+  if (userId) {
+    const { data: usageCheck, error: usageError } = await supabase.rpc('check_and_increment_usage', { p_user_id: userId });
+    
+    if (usageError) {
+      console.error("Usage check error:", usageError);
+    }
+
+    if (usageCheck && usageCheck.allowed === false) {
+       throw new Error(usageCheck.message || "Limit harian habis.");
+    }
+  }
+
+  // --- NEW FEATURE: FETCH REAL-TIME USER STATUS FOR AI CONTEXT ---
+  let userStatusPrompt = "";
+  if (userId) {
+    try {
+      const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      if (profile) {
+        const isPremium = profile.is_premium && profile.premium_until && new Date(profile.premium_until) > new Date();
+        const premiumDate = profile.premium_until 
+          ? new Date(profile.premium_until).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) 
+          : '-';
+        
+        userStatusPrompt = `
+[STATUS AKUN USER (REAL-TIME DATA)]
+- Nama: ${profile.full_name || 'User'}
+- Email: ${profile.email}
+- Tipe Akun: ${isPremium ? '👑 PREMIUM' : 'FREE TIER'}
+- Limit Harian Terpakai: ${profile.daily_usage} / ${isPremium ? 'Unlimited' : '20'}
+- Masa Aktif Premium: ${isPremium ? premiumDate : 'Tidak Aktif'}
+- ID: ${userId}
+*INSTRUKSI: Jika user bertanya tentang status akun/limit/sisa kuota, JAWABLAH berdasarkan data di atas. Jangan mengarang.*
+`;
+      }
+    } catch (err) {
+      console.error("Failed to fetch user context for AI", err);
+    }
+  }
+
+  // C. MODEL SELECTION
   const lastMsgObj = messages[messages.length - 1];
   const lastMsgContent = typeof lastMsgObj.content === 'string' ? lastMsgObj.content : JSON.stringify(lastMsgObj.content);
   const hasImage = Array.isArray(lastMsgObj.content);
   const isSearchResult = lastMsgContent.includes('DATA WEB:');
   
-  let activeModel = selectOptimalModel(lastMsgContent, hasImage);
-  if (isSearchResult) activeModel = SMART_MODEL;
+  let activeModel = FAST_MODEL;
 
-  // --- LOGIKA KREDIT REAL-TIME ---
-  const estimatedCost = activeModel === SMART_MODEL ? 2 : 1;
-  const projectedCredits = Math.max(0, userCredits - estimatedCost); // Sisa kredit SETELAH pesan ini
-  const formattedCredits = projectedCredits.toLocaleString('id-ID');
+  if (hasImage) {
+    activeModel = initialModelId; // Use Vision Model
+  } else if (isSearchResult) {
+    activeModel = SMART_MODEL;
+  } else {
+    activeModel = selectOptimalModel(lastMsgContent);
+  }
 
-  // B. BUILD SYSTEM PROMPT (STRICT RULES)
+  // D. BUILD SYSTEM PROMPT
   const timePrompt = getTimeContext();
   const moodPrompt = detectMoodAndConstructPrompt(lastMsgContent);
   const memories = await fetchUserMemories(userId);
   const recentMemories = memories.slice(-2).join('; ');
   const memoryPrompt = recentMemories ? `[INGATAN USER: ${recentMemories}]` : '';
 
-  // --- STRICT ECONOMY & PERSONA LOGIC ---
-  const isLowBalance = projectedCredits < 5;
-  
-  let economyInstruction = "";
-  if (isLowBalance) {
-    economyInstruction = `
-    [SYSTEM DATA: CURRENT_CREDITS = ${formattedCredits} (CRITICAL)]
-    1. SALDO MENIPIS. Jika user minta task berat, ingatkan: "Saldo lu sisa ${formattedCredits} Bang, isi dulu biar aman."
-    2. WAJIB sertakan tag [ACTION:OPEN_TOPUP] di akhir pesan jika kamu membahas saldo.
-    3. Jika user tanya saldo, jawab jujur angkanya: ${formattedCredits}.
-    `;
-  } else {
-    economyInstruction = `
-    [SYSTEM DATA: CURRENT_CREDITS = ${formattedCredits} (SAFE)]
-    1. DILARANG membahas kredit/saldo kecuali user bertanya.
-    2. DILARANG menyertakan tag [ACTION] atau [STATS]. Hapus semua elemen gamifikasi.
-    3. Fokus 100% pada solusi coding. Jangan bertele-tele.
-    `;
-  }
-
   const systemMessage = messages.find(msg => msg.role === 'system');
   const baseSystem = systemMessage ? systemMessage.content : "You are an AI Assistant.";
-  const timeContext = getTimeContext(); 
-
-  // --- PASTIKAN VARIABLE INI ADA DI ATAS ---
-  // const timeContext = getTimeContext(); 
   
   const finalSystemContent = `
   ${baseSystem}
   
-  ${timeContext}
+  ${timePrompt}
+  ${userStatusPrompt}
   ${memoryPrompt}
   ${moodPrompt}
-  ${economyInstruction}
 
   [PRIORITAS UTAMA: JAWABAN RELEVAN & NYAMBUNG]
-  1. TUGAS UTAMA: Jawab pertanyaan user sesuai topik yang dia tanya.
-  2. JANGAN MAKSA: Jangan memaksakan jokes, roasting, atau gimmick "Suhu" kalau tidak nyambung dengan chat user. 
-  3. CONTOH SALAH: User tanya "Cara install python", AI malah bahas "Tukang Bakso". (INI DILARANG).
-  4. CONTOH BENAR: User tanya "Cara install python", AI jawab "Gampang Bang, ketik 'pkg install python' aja. Gas cobain."
+  1. TUGAS: Jawab pertanyaan user to-the-point.
+  2. JANGAN MAKSA: Jangan roasting/jokes kalau user lagi serius error.
+  3. ANTI-YAPPING: Jangan ceramah panjang lebar.
 
   [IDENTITAS: TEMAN MABAR CODING (KZ.TUTORIAL)]
-  - Lu adalah partner coding Bang Jul. Bawaan lu asik, pinter, dan santai.
-  - Anggap user itu temen deket. Gak perlu formal, tapi tetep sopan dan solutif.
+  - Lu partner coding Bang Jul. Asik, pinter, santai.
   - Panggilan: Gue/Lu, Bang, Bro.
 
-  [GAYA KOMUNIKASI: ADAPTIF]
-  1. Jika User Serius/Tanya Error:
-     Fokus bantu benerin error-nya. Jangan kebanyakan bercanda. Kasih solusi to-the-point.
-  2. Jika User Bercanda/Iseng:
-     Baru lu boleh keluarin jurus "Suhu", roasting tipis, atau jokes coding.
-  3. Jika User Tanya Hack/Illegal:
-     Jawab singkat & ngeledek dikit aja: "Waduh, mau jadi Bjorka? Wkwk. Gak bisa Bang, bahaya. Mending belajar yang aman-aman aja." (HABIS ITU STOP, JANGAN CERAMAH).
-
-  [EKONOMI SIMPLE]
-  - Saldo: ${formattedCredits}.
-  - Cuma bahas saldo kalau:
-    a. User tanya "Cek saldo".
-    b. Saldo kritis di bawah 5 (kasih warning santai: "Kredit sekarat nih Bang, isi dulu gih").
-    c. Kalau saldo aman, DIAM SAJA soal uang.
-
   [ATURAN VISUAL]
-  1. Kalau search web: [SUMBER: Judul | URL]
-  2. Kalau saldo < 5: [STATS: ${formattedCredits}]
+  1. [SUMBER: Judul | URL] -> Wajib kalau search web.
+  2. [SAVE_MEMORY: ...] -> Catat info penting user.
   `;
 
-
-  // C. PREPARE PAYLOAD
+  // E. PREPARE PAYLOAD (WITH SANITIZATION FOR 413 ERROR FIX)
   const chatHistory = messages.filter(msg => msg.role !== 'system');
-  const limitedHistory = chatHistory.slice(-6); // Keep context tight
+  const limitedHistory = chatHistory.slice(-6); 
 
   const processedMessages = [
     { role: 'system', content: finalSystemContent },
     ...limitedHistory.map(msg => {
+      // 1. JANGAN UBAH PESAN TERAKHIR (Current Message)
+      // Ini penting agar gambar yang BARU SAJA diupload tetap terkirim ke AI
+      if (msg === lastMsgObj) return msg;
+
+      // 2. UNTUK HISTORY: Convert Multimodal Array ke Text Biasa
       if (Array.isArray(msg.content)) {
         const text = msg.content.find((c: any) => c.type === 'text')?.text || "";
         return { role: msg.role, content: text };
       }
+      
+      // 3. UNTUK HISTORY: Hapus Base64 Image string yang besar
+      // Regex ini mencari pola ![...](data:image/...) dan menggantinya dengan placeholder
+      if (typeof msg.content === 'string') {
+         // Regex optimization: [^\]]* matches alt text, [^;]+ matches mimetype, [^\)]+ matches base64 data
+         const cleaned = msg.content.replace(/!\[[^\]]*\]\(data:image\/[^;]+;base64,[^\)]+\)/g, '[Gambar Diupload]');
+         return { ...msg, content: cleaned };
+      }
+
       return msg;
     })
   ];
 
-  // D. UI FEEDBACK (Thinking State)
+  // F. UI FEEDBACK
   if (isSearchResult) {
     yield "🔍 _Verifikasi data web..._\n\n";
+    await delay(200);
+  } else if (hasImage) {
+    yield "👁️ _Menganalisis screenshot (Llama 4 Vision)..._\n\n";
     await delay(200);
   } else if (activeModel === SMART_MODEL && !moodPrompt) {
     yield "⚡ _Menganalisis logika..._\n\n";
     await delay(200);
   }
 
-  // E. EXECUTE API (Rotasi Key)
-  let attempt = 0;
-  const maxAttempts = keys.length * 2;
+  // G. EXECUTE API
   let success = false;
 
-  while (!success && attempt < maxAttempts) {
-    const safeIndex = currentKeyIndex % keys.length;
-    const usedKey = keys[safeIndex];
+  for (const keyData of dbKeys) {
+    const currentKey = keyData.api_key;
 
     try {
       const response = await fetch(GROQ_API_URL, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${usedKey}`,
+          'Authorization': `Bearer ${currentKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           model: activeModel,
           messages: processedMessages,
           stream: true,
-          temperature: moodPrompt ? 0.6 : 0.4, // Lower temperature for more precision on data
+          temperature: moodPrompt ? 0.6 : 0.4, 
           max_tokens: 4096,
           top_p: 0.95
         }),
       });
 
-      if (!response.ok) {
-        if ([429, 503, 413].includes(response.status)) {
-          if (activeModel === SMART_MODEL && attempt > 1) activeModel = FAST_MODEL;
-          currentKeyIndex = (currentKeyIndex + 1) % keys.length;
-          attempt++;
-          await delay(500);
-          continue;
-        }
-        throw new Error(`Groq API Error: ${response.status}`);
+      // SMART HANDLING 429, 503, & 413
+      if (response.status === 429 || response.status === 503) {
+         console.warn(`Key ${keyData.id} Limit (429/503). Switching with delay...`);
+         await delay(1000); 
+         continue; 
       }
 
-      success = true;
-      currentKeyIndex = (currentKeyIndex + 1) % keys.length;
-      supabase.rpc('increment_key_usage', { key_input: usedKey }).then();
+      // Handle Payload Too Large specifically
+      if (response.status === 413) {
+        console.error("Groq API Error: 413 (Payload Too Large).");
+        throw new Error("Gambar terlalu besar atau chat terlalu panjang. Coba refresh chat.");
+      }
 
-      // F. STREAM PROCESSING
+      if (!response.ok) throw new Error(`Groq API Error: ${response.status}`);
+
+      success = true;
+
+      // UPDATE KEY USAGE STATS
+      supabase.from('api_key_usage')
+        .update({ usage_count: keyData.usage_count + 1, last_used_at: new Date().toISOString() })
+        .eq('id', keyData.id).then();
+
+      // STREAM RESPONSE
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -273,21 +289,36 @@ export async function* streamGroqRequest(
         }
       }
 
-      // G. AUTO-MEMORY SAVE
+      // MEMORY SAVE
       const memoryMatch = fullTextAccumulator.match(/\[SAVE_MEMORY: (.*?)\]/);
       if (memoryMatch && memoryMatch[1]) {
         await saveUserMemory(userId, memoryMatch[1]);
       }
+      
+      break; 
 
     } catch (error) {
-      if (attempt >= maxAttempts - 1) break;
-      currentKeyIndex = (currentKeyIndex + 1) % keys.length;
-      attempt++;
-      await delay(500);
+      console.error(`Error Key ${keyData.id}:`, error);
+
+      // --- CRITICAL UPDATE: REFUND USAGE ON SYSTEM ERROR ---
+      // Jika error bukan karena "Limit Harian Habis" (yang sudah dicek di awal),
+      // maka kita asumsikan ini error sistem/API Key/Network, jadi kita kembalikan limit user.
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isUserLimitError = errorMessage.includes("Limit harian habis");
+
+      if (userId && !isUserLimitError) {
+         console.warn("System Error detected. Refunding user credit...");
+         await supabase.rpc('decrement_usage', { p_user_id: userId });
+      }
+
+      // If it's 413, break loop immediately because switching keys won't fix payload size
+      if (errorMessage.includes("Gambar terlalu besar")) {
+        throw error;
+      }
     }
   }
 
   if (!success) {
-    throw new Error("Server sibuk. Coba refresh sebentar.");
+    throw new Error("Semua server sibuk (Overload). Coba lagi nanti ya Bang.");
   }
 }

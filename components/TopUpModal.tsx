@@ -1,49 +1,14 @@
+
 import React, { useState } from 'react';
-import { X, CreditCard, Upload, Check, Loader2, Globe, Wallet } from 'lucide-react';
+import { X, CreditCard, Upload, Check, Loader2, Globe, Wallet, Clock, Star } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { SUBSCRIPTION_PACKAGES } from '../constants';
 
 interface TopUpModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
-
-// 💰 KONFIGURASI HARGA (Sesuai Request)
-const PACKAGES = [
-  { 
-    id: 'starter',
-    credits: 30, 
-    priceIDR: 25000, 
-    priceUSD: 2.49,
-    label: 'Starter', 
-    desc: 'Cukup untuk pemula' 
-  },
-  { 
-    id: 'pro',
-    credits: 100, 
-    priceIDR: 70000, 
-    priceUSD: 6.49,
-    label: 'Pro (Hemat)', 
-    desc: 'Paling laris (Best Value)',
-    popular: true 
-  },
-  { 
-    id: 'expert',
-    credits: 300, 
-    priceIDR: 180000, 
-    priceUSD: 16.99,
-    label: 'Expert', 
-    desc: 'Untuk power user' 
-  },
-  { 
-    id: 'ultra',
-    credits: 700, 
-    priceIDR: 350000, 
-    priceUSD: 32.99,
-    label: 'Ultra', 
-    desc: 'Kapasitas maksimal' 
-  },
-];
 
 export const TopUpModal: React.FC<TopUpModalProps> = ({ isOpen, onClose }) => {
   const { session } = useAuth();
@@ -61,7 +26,7 @@ export const TopUpModal: React.FC<TopUpModalProps> = ({ isOpen, onClose }) => {
   const QRIS_URL = "https://gesoseeqaaixidsvrttz.supabase.co/storage/v1/object/public/QRIS_PAYMENT/qris.png";
   
   // PAYPAL CONFIG
-  const PAYPAL_ME_LINK = "https://paypal.me/Kztutorial97"; // Ganti jika username beda
+  const PAYPAL_ME_LINK = "https://paypal.me/Kztutorial97"; 
 
   if (!isOpen) return null;
 
@@ -86,25 +51,25 @@ export const TopUpModal: React.FC<TopUpModalProps> = ({ isOpen, onClose }) => {
         .getPublicUrl(fileName);
 
       // 2. Simpan ke Database
-      // Tentukan harga & metode berdasarkan currency yang dipilih
-      const finalPrice = currency === 'IDR' ? selectedPkg.priceIDR : selectedPkg.priceUSD;
+      const finalPrice = currency === 'IDR' ? selectedPkg.price_idr : selectedPkg.price_usd;
       const method = currency === 'IDR' ? 'QRIS' : 'PAYPAL';
 
+      // NOTE: Kita simpan durasi hari di kolom 'amount'
       const { error: dbError } = await supabase
         .from('topup_requests')
         .insert({
           user_id: session.user.id,
-          amount: selectedPkg.credits,
+          amount: selectedPkg.duration_days, 
           price: finalPrice,
           payment_method: method,
           proof_url: publicUrl,
           status: 'pending',
-          currency: currency // Kolom baru
+          currency: currency 
         });
 
       if (dbError) throw dbError;
 
-      alert("✅ Bukti terkirim! Admin akan memverifikasi secepatnya.");
+      alert("✅ Bukti terkirim! Admin akan mengaktifkan paket Premium Anda.");
       handleClose();
     } catch (err: any) {
       alert("Gagal: " + err.message);
@@ -122,8 +87,15 @@ export const TopUpModal: React.FC<TopUpModalProps> = ({ isOpen, onClose }) => {
 
   const getPayPalLink = () => {
     if (!selectedPkg) return '#';
-    // Format Link: paypal.me/username/2.49USD
-    return `${PAYPAL_ME_LINK}/${selectedPkg.priceUSD}USD`;
+    return `${PAYPAL_ME_LINK}/${selectedPkg.price_usd}USD`;
+  };
+
+  const getColorClass = (color: string) => {
+      switch(color) {
+          case 'purple': return 'border-purple-500/50 hover:bg-purple-900/10';
+          case 'orange': return 'border-orange-500/50 hover:bg-orange-900/10';
+          default: return 'border-blue-500/50 hover:bg-blue-900/10';
+      }
   };
 
   return (
@@ -133,8 +105,8 @@ export const TopUpModal: React.FC<TopUpModalProps> = ({ isOpen, onClose }) => {
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-700 bg-[#202023] flex justify-between items-center">
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <CreditCard size={20} className="text-blue-400" />
-            Top Up Kredit
+            <Star size={20} className="text-yellow-400" fill="currentColor" />
+            Upgrade Premium
           </h2>
           <button onClick={handleClose} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-colors"><X size={20} /></button>
         </div>
@@ -162,31 +134,33 @@ export const TopUpModal: React.FC<TopUpModalProps> = ({ isOpen, onClose }) => {
 
               {/* Package List */}
               <div className="grid gap-3">
-                {PACKAGES.map((pkg) => (
+                {SUBSCRIPTION_PACKAGES.map((pkg) => (
                   <button
                     key={pkg.id}
                     onClick={() => { setSelectedPkg(pkg); setStep(2); }}
-                    className="relative flex items-center justify-between p-4 bg-slate-800/50 border border-slate-700 hover:border-blue-500 hover:bg-slate-800 rounded-xl transition-all group text-left"
+                    className={`relative flex items-center justify-between p-4 bg-slate-800/50 border rounded-xl transition-all group text-left ${getColorClass(pkg.color)}`}
                   >
                     {pkg.popular && (
-                      <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">
-                        POPULAR
+                      <span className="absolute -top-2 -right-2 bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
+                         <Star size={10} fill="currentColor"/> POPULAR
                       </span>
                     )}
                     <div>
                       <div className="font-bold text-white text-lg flex items-center gap-2">
-                        {pkg.credits} Credits
+                        {pkg.name}
                       </div>
-                      <div className="text-xs text-slate-400">{pkg.desc}</div>
+                      <div className="flex items-center gap-1 text-sm text-slate-300 mt-1">
+                          <Clock size={14}/> {pkg.duration_days} Hari
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-1 max-w-[150px] leading-tight">{pkg.description}</div>
                     </div>
                     <div className="text-right">
                        <div className={`font-mono font-bold text-lg ${currency === 'USD' ? 'text-blue-400' : 'text-green-400'} group-hover:scale-105 transition-transform`}>
                          {currency === 'IDR' 
-                           ? `Rp ${pkg.priceIDR.toLocaleString('id-ID')}` 
-                           : `$${pkg.priceUSD}`
+                           ? `Rp ${pkg.price_idr.toLocaleString('id-ID')}` 
+                           : `$${pkg.price_usd}`
                          }
                        </div>
-                       {currency === 'USD' && <div className="text-[10px] text-slate-500">via PayPal</div>}
                     </div>
                   </button>
                 ))}
@@ -194,7 +168,7 @@ export const TopUpModal: React.FC<TopUpModalProps> = ({ isOpen, onClose }) => {
               
               {currency === 'USD' && (
                 <p className="text-xs text-center text-slate-500">
-                  💳 PayPal tersedia untuk pembayaran internasional. <br/>Harga sudah termasuk biaya layanan.
+                  💳 PayPal tersedia untuk pembayaran internasional.
                 </p>
               )}
             </div>
@@ -206,13 +180,18 @@ export const TopUpModal: React.FC<TopUpModalProps> = ({ isOpen, onClose }) => {
                  <p className="text-slate-400 text-xs uppercase tracking-wider font-bold mb-1">Total Tagihan</p>
                  <p className={`text-3xl font-bold ${currency === 'USD' ? 'text-blue-400' : 'text-green-400'}`}>
                    {currency === 'IDR' 
-                     ? `Rp ${selectedPkg.priceIDR.toLocaleString('id-ID')}` 
-                     : `$${selectedPkg.priceUSD}`
+                     ? `Rp ${selectedPkg.price_idr.toLocaleString('id-ID')}` 
+                     : `$${selectedPkg.price_usd}`
                    }
                  </p>
-                 <p className="text-sm text-slate-300 mt-2 font-medium bg-slate-900/50 inline-block px-3 py-1 rounded-full">
-                   Paket: {selectedPkg.label} ({selectedPkg.credits} Credits)
-                 </p>
+                 <div className="flex justify-center gap-2 mt-2">
+                    <span className="text-sm text-slate-300 font-medium bg-slate-900/50 px-3 py-1 rounded-full border border-slate-700">
+                        Paket {selectedPkg.name}
+                    </span>
+                    <span className="text-sm text-slate-300 font-medium bg-slate-900/50 px-3 py-1 rounded-full border border-slate-700">
+                        {selectedPkg.duration_days} Hari
+                    </span>
+                 </div>
               </div>
 
               {/* Area Pembayaran */}
@@ -234,11 +213,11 @@ export const TopUpModal: React.FC<TopUpModalProps> = ({ isOpen, onClose }) => {
                        rel="noreferrer"
                        className="block w-full bg-[#0070ba] hover:bg-[#003087] text-white font-bold py-3 rounded-full transition-colors mb-3"
                      >
-                       Bayar Sekarang (${selectedPkg.priceUSD})
+                       Bayar Sekarang (${selectedPkg.price_usd})
                      </a>
                      
                      <p className="text-gray-500 text-[10px] px-4">
-                       Klik tombol di atas untuk membayar langsung. Setelah sukses, screenshot bukti pembayaran Anda.
+                       Setelah sukses, upload screenshot bukti pembayaran di bawah ini.
                      </p>
                    </div>
                  )}

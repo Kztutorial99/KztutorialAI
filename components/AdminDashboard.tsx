@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Save, Key, Shield, AlertCircle, Check, X, 
@@ -30,78 +29,90 @@ const checkApiKeyHealth = async (key: string) => {
   }
 };
 
-// === SQL SCRIPT UPDATE (Termasuk Table Logs, Usage, & Optimized User Memories) ===
+// === SQL SCRIPT UPDATE (SUBSCRIPTION SYSTEM & CLEANUP) ===
 const REQUIRED_SQL = `
--- COPY SCRIPT INI KE SUPABASE SQL EDITOR
+-- 1. FIX: NOTIFIKASI SELAMAT DATANG (HAPUS PESAN KREDIT LAMA)
+CREATE OR REPLACE FUNCTION public.handle_new_user() 
+RETURNS trigger AS $$
+BEGIN
+  -- Buat Profile Baru
+  INSERT INTO public.profiles (id, email, full_name, referral_code)
+  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', upper(substring(md5(random()::text) FROM 1 FOR 8)));
 
--- 1. Table System Logs
+  -- Kirim Notifikasi Selamat Datang (YANG BENAR)
+  INSERT INTO public.notifications (user_id, title, message, type)
+  VALUES (
+    new.id,
+    '🎉 Akun Berhasil Dibuat!',
+    'Selamat datang di Kz.tutorial AI! Nikmati Free Tier dengan limit 20 Chat/Hari. Upgrade ke Premium untuk akses tanpa batas.',
+    'system'
+  );
+
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 2. UPDATE TABLE PROFILES (Add New Features)
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_premium boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS premium_until timestamptz;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS daily_usage int DEFAULT 0;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_reset date DEFAULT CURRENT_DATE;
+
+-- 3. CLEANUP LEGACY COLUMNS (Hapus Kolom Sampah)
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS credits;
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS tier;
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS is_admin;
+ALTER TABLE public.system_settings DROP COLUMN IF EXISTS maintenance_mode;
+ALTER TABLE public.notifications DROP COLUMN IF EXISTS action_url;
+
+-- 4. TABLE SYSTEM LOGS & API USAGE
 CREATE TABLE IF NOT EXISTS public.system_logs (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    level text, 
-    action text,
-    message text,
-    meta jsonb DEFAULT '{}'::jsonb,
-    created_at timestamptz DEFAULT now()
+    level text, action text, message text, meta jsonb DEFAULT '{}'::jsonb, created_at timestamptz DEFAULT now()
 );
-
--- 2. Table API Key Usage
 CREATE TABLE IF NOT EXISTS public.api_key_usage (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    api_key text UNIQUE NOT NULL,
-    usage_count int DEFAULT 0,
-    last_used_at timestamptz DEFAULT now()
+    api_key text UNIQUE NOT NULL, usage_count int DEFAULT 0, last_used_at timestamptz DEFAULT now()
 );
 
--- 3. Optimized User Memories (1 Row Per User via JSONB Array)
-CREATE TABLE IF NOT EXISTS public.user_memories (
-    user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    memories jsonb DEFAULT '[]'::jsonb,
-    updated_at timestamptz DEFAULT now()
-);
-
--- 4. Enable RLS for Memories
-ALTER TABLE public.user_memories ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can manage their own memories" ON public.user_memories
-    FOR ALL USING (auth.uid() = user_id);
-
--- 5. Atomic JSONB Memory Append Function
-CREATE OR REPLACE FUNCTION public.upsert_user_memory(p_user_id uuid, p_fact text)
-RETURNS void AS $$
-BEGIN
-  INSERT INTO public.user_memories (user_id, memories)
-  VALUES (p_user_id, jsonb_build_array(p_fact))
-  ON CONFLICT (user_id)
-  DO UPDATE SET 
-    memories = CASE 
-      WHEN user_memories.memories @> jsonb_build_array(p_fact) THEN user_memories.memories
-      ELSE user_memories.memories || jsonb_build_array(p_fact)
-    END,
-    updated_at = now();
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 6. Increment Usage Function
-CREATE OR REPLACE FUNCTION public.increment_key_usage(key_input text)
-RETURNS void AS $$
-BEGIN
-  INSERT INTO public.api_key_usage (api_key, usage_count, last_used_at)
-  VALUES (key_input, 1, now())
-  ON CONFLICT (api_key)
-  DO UPDATE SET
-    usage_count = api_key_usage.usage_count + 1,
-    last_used_at = now();
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 7. Approve Function
-CREATE OR REPLACE FUNCTION public.admin_approve_topup(request_id uuid, target_user_id uuid, credit_amount int) 
+-- 5. FUNCTION: CEK LIMIT & SUBSCRIPTION
+CREATE OR REPLACE FUNCTION public.check_and_increment_usage(p_user_id uuid)
 RETURNS json AS $$
-DECLARE v_new_credits int;
+DECLARE
+  v_profile record;
+  v_limit int := 20; -- Limit Harian Free User
 BEGIN
-  UPDATE public.topup_requests SET status = 'approved' WHERE id = request_id;
-  UPDATE public.profiles SET credits = COALESCE(credits, 0) + credit_amount WHERE id = target_user_id RETURNING credits INTO v_new_credits;
-  INSERT INTO public.notifications (user_id, title, message, type) VALUES (target_user_id, '✅ Pembayaran Diterima', 'Topup ' || credit_amount || ' kredit berhasil.', 'payment');
-  RETURN json_build_object('success', true, 'new_credits', v_new_credits);
+  SELECT * INTO v_profile FROM public.profiles WHERE id = p_user_id;
+
+  -- A. Reset Limit jika hari berganti
+  IF v_profile.last_reset < CURRENT_DATE THEN
+    UPDATE public.profiles SET daily_usage = 0, last_reset = CURRENT_DATE WHERE id = p_user_id;
+    v_profile.daily_usage := 0; 
+  END IF;
+
+  -- B. Cek Premium (Jika aktif & belum expired, Bypass Limit)
+  IF v_profile.is_premium = true AND v_profile.premium_until > now() THEN
+     RETURN json_build_object('allowed', true, 'status', 'premium', 'usage', v_profile.daily_usage);
+  END IF;
+
+  -- C. Cek Limit Free
+  IF v_profile.daily_usage >= v_limit THEN
+     RETURN json_build_object('allowed', false, 'message', 'Limit Harian Habis (20/20). Upgrade ke Premium!');
+  END IF;
+
+  -- D. Increment Usage
+  UPDATE public.profiles SET daily_usage = daily_usage + 1 WHERE id = p_user_id;
+  RETURN json_build_object('allowed', true, 'status', 'free', 'usage', v_profile.daily_usage + 1);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 6. FUNCTION: KEMBALIKAN LIMIT (JIKA ERROR SYSTEM)
+CREATE OR REPLACE FUNCTION public.decrement_usage(p_user_id uuid)
+RETURNS void AS $$
+BEGIN
+  UPDATE public.profiles
+  SET daily_usage = GREATEST(0, daily_usage - 1)
+  WHERE id = p_user_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 `;
@@ -267,10 +278,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
     try {
       if (type === 'approve' && req) {
         const { error } = await supabase.rpc('admin_approve_topup', { 
-          request_id: req.id, target_user_id: req.user_id, credit_amount: req.amount 
+          request_id: req.id, target_user_id: req.user_id, duration_days: req.amount 
         });
         if (error) throw error;
-        await logToDB('SUCCESS', 'PAYMENT_APPROVE', `Topup ${req.amount} Credits Approved`, { user: req.profiles?.full_name });
+        await logToDB('SUCCESS', 'PAYMENT_APPROVE', `Premium ${req.amount} Days Activated`, { user: req.profiles?.full_name });
         fetchRequests(); 
 
       } else if (type === 'reject' && req) {
@@ -278,7 +289,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           request_id: req.id, target_user_id: req.user_id 
         });
         if (error) throw error;
-        await logToDB('WARN', 'PAYMENT_REJECT', `Topup Request Rejected`, { user: req.profiles?.full_name });
+        await logToDB('WARN', 'PAYMENT_REJECT', `Premium Request Rejected`, { user: req.profiles?.full_name });
         fetchRequests();
 
       } else if (type === 'delete_history') {
@@ -357,8 +368,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                     <span className="font-bold text-white">{confirmModal.req?.profiles?.full_name || 'Unknown'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Jumlah:</span>
-                    <span className="font-bold text-green-400">+{confirmModal.req?.amount} Credits</span>
+                    <span className="text-slate-400">Paket:</span>
+                    <span className="font-bold text-green-400">{confirmModal.req?.amount} Hari</span>
                   </div>
                 </>
               )}
@@ -408,22 +419,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700"><p className="text-[10px] text-slate-400 uppercase font-bold">Active</p><p className="text-xl font-black text-green-400">{activeCount}</p></div>
                 <div className="col-span-2 md:col-span-1 bg-slate-800/60 p-3 rounded-xl border border-slate-700 flex justify-between items-center"><div><p className="text-[10px] text-slate-400 uppercase font-bold">Auto Refresh</p><p className="text-xs text-white">{isAutoRefresh ? 'ON (30s)' : 'OFF'}</p></div><button onClick={()=>setIsAutoRefresh(!isAutoRefresh)} className={`p-2 rounded-lg ${isAutoRefresh?'bg-green-500/20 text-green-400':'bg-slate-700 text-slate-400'}`}><RefreshCw size={16} className={isAutoRefresh?'animate-spin':''}/></button></div>
               </div>
-              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">{keys.map((k, i) => { const h = keyHealth[k] || { status: 'unknown', latency: 0, msg: 'Wait' }; return ( <div key={i} className={`p-3 rounded-lg border flex flex-col sm:flex-row gap-3 items-start sm:items-center ${h.status==='active'?'border-green-500/30 bg-green-900/10':'border-slate-700 bg-slate-800/30'}`}> <div className="flex items-center gap-2 w-full sm:w-auto"> <span className="text-xs font-mono text-slate-500">#{i+1}</span> <span className={`text-[10px] px-2 py-0.5 rounded uppercase font-bold ${h.status==='active'?'bg-green-500/20 text-green-400':'bg-slate-700 text-slate-400'}`}>{h.msg}</span> </div> <input type={visibleKeys[i] ? "text" : "password"} value={k} onChange={e=>{const n=[...keys];n[i]=e.target.value;setKeys(n)}} className="flex-1 w-full bg-black/20 border border-slate-700 rounded px-3 py-2 text-xs font-mono text-slate-300 focus:border-blue-500 outline-none" placeholder="API Key..."/> <div className="flex items-center gap-2 w-full sm:w-auto justify-end"> <span className="hidden sm:block text-[10px] font-mono text-slate-500">{h.latency}ms</span> <button onClick={()=>setVisibleKeys(p=>({...p,[i]:!p[i]}))} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-400"><Activity size={14}/></button> <button onClick={()=>{const n=[...keys];n.splice(i,1);setKeys(n)}} className="p-2 bg-slate-800 hover:bg-red-900/50 rounded text-red-400"><Trash2 size={14}/></button> </div> </div> ); })}</div>
-              <div className="mt-4 flex flex-col sm:flex-row gap-3"><button onClick={()=>setKeys([...keys,''])} className="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-lg text-xs font-bold text-white border border-slate-700">+ Add Key</button><button onClick={handleSaveKeys} className="flex-[2] bg-blue-600 hover:bg-blue-500 py-2 rounded-lg text-xs font-bold text-white shadow-lg">Save Changes</button></div>
+
+              {/* ACTION BUTTONS */}
+              <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                <button onClick={()=>setKeys(['', ...keys])} className="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-lg text-xs font-bold text-white border border-slate-700">+ Add Key</button>
+                <button onClick={handleSaveKeys} className="flex-[2] bg-blue-600 hover:bg-blue-500 py-2 rounded-lg text-xs font-bold text-white shadow-lg">Save Changes</button>
+              </div>
+
+              {/* SERPER KEY INPUT */}
+              <div className="mb-4 animate-in fade-in slide-in-from-top-2">
+                 <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Serper API Key (Web Search)</label>
+                 <div className="flex items-center gap-2">
+                    <div className="p-2 bg-slate-800 rounded border border-slate-700 text-slate-400"><Globe size={16}/></div>
+                    <input 
+                       value={serperKey} 
+                       onChange={(e)=>setSerperKey(e.target.value)} 
+                       className="flex-1 bg-black/20 border border-slate-700 rounded px-3 py-2 text-xs font-mono text-slate-300 focus:border-blue-500 outline-none transition-colors" 
+                       placeholder="Optional: Serper.dev API Key..."
+                    />
+                 </div>
+              </div>
+
+              <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
+                {keys.map((k, i) => { 
+                  const h = keyHealth[k] || { status: 'unknown', latency: 0, msg: 'Wait' }; 
+                  return ( 
+                    <div key={i} className={`p-3 rounded-lg border flex flex-col sm:flex-row gap-3 items-start sm:items-center animate-in slide-in-from-top-2 duration-300 ${h.status==='active'?'border-green-500/30 bg-green-900/10':'border-slate-700 bg-slate-800/30'}`}> 
+                      <div className="flex items-center gap-2 w-full sm:w-auto"> 
+                        <span className="text-xs font-mono text-slate-500">#{i+1}</span> 
+                        <span className={`text-[10px] px-2 py-0.5 rounded uppercase font-bold ${h.status==='active'?'bg-green-500/20 text-green-400':'bg-slate-700 text-slate-400'}`}>{h.msg}</span> 
+                      </div> 
+                      <input type={visibleKeys[i] ? "text" : "password"} value={k} onChange={e=>{const n=[...keys];n[i]=e.target.value;setKeys(n)}} className="flex-1 w-full bg-black/20 border border-slate-700 rounded px-3 py-2 text-xs font-mono text-slate-300 focus:border-blue-500 outline-none" placeholder="API Key..."/> 
+                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end"> 
+                        <span className="hidden sm:block text-[10px] font-mono text-slate-500">{h.latency}ms</span> 
+                        <button onClick={()=>setVisibleKeys(p=>({...p,[i]:!p[i]}))} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-400"><Activity size={14}/></button> 
+                        <button onClick={()=>{const n=[...keys];n.splice(i,1);setKeys(n)}} className="p-2 bg-slate-800 hover:bg-red-900/50 rounded text-red-400"><Trash2 size={14}/></button> 
+                      </div> 
+                    </div> 
+                  ); 
+                })}
+              </div>
             </div>
           )}
 
           {activeTab === 'payments' && (
             <div className="animate-in fade-in">
               <div className="flex justify-between items-center mb-4"><h2 className="font-bold text-white">Pending Requests</h2><button onClick={fetchRequests} className="p-2 bg-slate-800 rounded-lg hover:bg-slate-700"><RefreshCw size={16}/></button></div>
-              {loadingRequests ? <div className="text-center py-10"><Loader2 className="animate-spin mx-auto"/></div> : ( <div className="grid gap-4">{requests.map(req => ( <div key={req.id} className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 flex flex-col sm:flex-row gap-4"> <div className="w-full sm:w-24 h-24 bg-black rounded-lg overflow-hidden shrink-0 border border-slate-600">{req.proof_url ? ( <a href={req.proof_url} target="_blank" className="block w-full h-full hover:scale-105 transition-transform"><img src={req.proof_url} className="w-full h-full object-cover"/></a> ) : <div className="flex items-center justify-center h-full"><AlertCircle size={20} className="text-slate-600"/></div>}</div> <div className="flex-1"> <div className="flex justify-between items-start"> <div> <div className="font-bold text-white">{req.profiles?.full_name || 'Unknown'}</div> <div className="text-xs text-slate-400">{req.profiles?.email}</div> </div> <span className="text-[10px] px-2 py-0.5 rounded uppercase font-bold text-yellow-400 bg-yellow-900/20">{req.status}</span> </div> <div className="mt-2 bg-black/20 p-2 rounded border border-slate-700/50 flex justify-between items-center"> <span className="text-xs text-slate-400">Topup: <b>{req.amount} Credits</b></span> <span className="text-sm font-bold text-green-400">Rp {req.price.toLocaleString()}</span> </div> <div className="flex gap-2 mt-3"><button onClick={() => openConfirmModal('approve', req)} className="flex-1 bg-green-600 hover:bg-green-500 py-2 rounded-lg text-xs font-bold text-white shadow-lg flex justify-center items-center gap-2">Approve</button><button onClick={() => openConfirmModal('reject', req)} className="flex-1 bg-slate-700 hover:bg-red-900/50 py-2 rounded-lg text-xs font-bold text-slate-300 hover:text-red-300 flex justify-center items-center gap-2">Reject</button></div> </div> </div> ))} {requests.length === 0 && <p className="text-center text-slate-500 py-10">Tidak ada request pending.</p>} </div> )}
+              {loadingRequests ? <div className="text-center py-10"><Loader2 className="animate-spin mx-auto"/></div> : ( <div className="grid gap-4">{requests.map(req => ( <div key={req.id} className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 flex flex-col sm:flex-row gap-4"> <div className="w-full sm:w-24 h-24 bg-black rounded-lg overflow-hidden shrink-0 border border-slate-600">{req.proof_url ? ( <a href={req.proof_url} target="_blank" className="block w-full h-full hover:scale-105 transition-transform"><img src={req.proof_url} className="w-full h-full object-cover"/></a> ) : <div className="flex items-center justify-center h-full"><AlertCircle size={20} className="text-slate-600"/></div>}</div> <div className="flex-1"> <div className="flex justify-between items-start"> <div> <div className="font-bold text-white">{req.profiles?.full_name || 'Unknown'}</div> <div className="text-xs text-slate-400">{req.profiles?.email}</div> </div> <span className="text-[10px] px-2 py-0.5 rounded uppercase font-bold text-yellow-400 bg-yellow-900/20">{req.status}</span> </div> <div className="mt-2 bg-black/20 p-2 rounded border border-slate-700/50 flex justify-between items-center"> <span className="text-xs text-slate-400">Paket: <b>{req.amount} Hari</b></span> <span className="text-sm font-bold text-green-400">Rp {req.price.toLocaleString()}</span> </div> <div className="flex gap-2 mt-3"><button onClick={() => openConfirmModal('approve', req)} className="flex-1 bg-green-600 hover:bg-green-500 py-2 rounded-lg text-xs font-bold text-white shadow-lg flex justify-center items-center gap-2">Approve</button><button onClick={() => openConfirmModal('reject', req)} className="flex-1 bg-slate-700 hover:bg-red-900/50 py-2 rounded-lg text-xs font-bold text-slate-300 hover:text-red-300 flex justify-center items-center gap-2">Reject</button></div> </div> </div> ))} {requests.length === 0 && <p className="text-center text-slate-500 py-10">Tidak ada request pending.</p>} </div> )}
             </div>
           )}
 
           {activeTab === 'history' && (
             <div className="animate-in fade-in flex flex-col h-[500px]">
               <div className="flex justify-between items-center mb-4"><div className="flex gap-2 items-center"><h2 className="font-bold text-white mr-4">History</h2>{selectedHistoryIds.size > 0 && ( <button onClick={() => openConfirmModal('delete_history')} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-lg animate-in zoom-in"><Trash2 size={14} /> Hapus ({selectedHistoryIds.size})</button> )}</div><button onClick={fetchHistory} className="p-2 bg-slate-800 rounded-lg hover:bg-slate-700"><RefreshCw size={16} className={loadingHistory?"animate-spin":""}/></button></div>
-              <div className="flex-1 bg-black/40 rounded-xl border border-slate-800 overflow-hidden flex flex-col"><div className="flex items-center px-4 py-3 bg-slate-900/80 border-b border-slate-800 text-[10px] text-slate-500 font-bold uppercase tracking-wider"><button onClick={toggleSelectAllHistory} className="mr-3 text-slate-400 hover:text-white">{selectedHistoryIds.size > 0 && selectedHistoryIds.size === historyRequests.length ? <CheckSquare size={16}/> : <Square size={16}/>}</button><span className="w-24">Date</span><span className="flex-1">User</span><span className="w-24 text-right pr-4">Amount</span><span className="w-20 text-center">Status</span><span className="w-12 text-center">Proof</span></div><div className="overflow-y-auto flex-1 custom-scrollbar">{historyRequests.map(req => ( <div key={req.id} className={`flex items-center px-4 py-3 border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors ${selectedHistoryIds.has(req.id) ? 'bg-blue-900/10' : ''}`}><button onClick={() => toggleSelectHistory(req.id)} className={`mr-3 ${selectedHistoryIds.has(req.id) ? 'text-blue-400' : 'text-slate-600 hover:text-slate-400'}`}>{selectedHistoryIds.has(req.id) ? <CheckSquare size={16}/> : <Square size={16}/>}</button><span className="w-24 text-[10px] text-slate-500 font-mono">{new Date(req.created_at).toLocaleDateString()}</span><div className="flex-1 min-w-0 pr-2"><div className="text-xs font-bold text-white truncate">{req.profiles?.full_name || 'Unknown'}</div><div className="text-[10px] text-slate-500 truncate">{req.profiles?.email}</div></div><div className="w-24 text-right pr-4"><div className="text-xs font-bold text-white">{req.amount} Cr</div><div className="text-[10px] text-slate-500">Rp {req.price.toLocaleString()}</div></div><div className="w-20 text-center"><span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${req.status==='approved'?'text-green-400 bg-green-900/20':'text-red-400 bg-red-900/20'}`}>{req.status}</span></div><div className="w-12 flex justify-center">{req.proof_url ? ( <a href={req.proof_url} target="_blank" className="text-blue-400 hover:text-blue-300"><FileJson size={14}/></a> ) : <span className="text-slate-700">-</span>}</div></div> ))}</div></div>
+              <div className="flex-1 bg-black/40 rounded-xl border border-slate-800 overflow-hidden flex flex-col"><div className="flex items-center px-4 py-3 bg-slate-900/80 border-b border-slate-800 text-[10px] text-slate-500 font-bold uppercase tracking-wider"><button onClick={toggleSelectAllHistory} className="mr-3 text-slate-400 hover:text-white">{selectedHistoryIds.size > 0 && selectedHistoryIds.size === historyRequests.length ? <CheckSquare size={16}/> : <Square size={16}/>}</button><span className="w-24">Date</span><span className="flex-1">User</span><span className="w-24 text-right pr-4">Paket</span><span className="w-20 text-center">Status</span><span className="w-12 text-center">Proof</span></div><div className="overflow-y-auto flex-1 custom-scrollbar">{historyRequests.map(req => ( <div key={req.id} className={`flex items-center px-4 py-3 border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors ${selectedHistoryIds.has(req.id) ? 'bg-blue-900/10' : ''}`}><button onClick={() => toggleSelectHistory(req.id)} className={`mr-3 ${selectedHistoryIds.has(req.id) ? 'text-blue-400' : 'text-slate-600 hover:text-slate-400'}`}>{selectedHistoryIds.has(req.id) ? <CheckSquare size={16}/> : <Square size={16}/>}</button><span className="w-24 text-[10px] text-slate-500 font-mono">{new Date(req.created_at).toLocaleDateString()}</span><div className="flex-1 min-w-0 pr-2"><div className="text-xs font-bold text-white truncate">{req.profiles?.full_name || 'Unknown'}</div><div className="text-[10px] text-slate-500 truncate">{req.profiles?.email}</div></div><div className="w-24 text-right pr-4"><div className="text-xs font-bold text-white">{req.amount} Hari</div><div className="text-[10px] text-slate-500">Rp {req.price.toLocaleString()}</div></div><div className="w-20 text-center"><span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${req.status==='approved'?'text-green-400 bg-green-900/20':'text-red-400 bg-red-900/20'}`}>{req.status}</span></div><div className="w-12 flex justify-center">{req.proof_url ? ( <a href={req.proof_url} target="_blank" className="text-blue-400 hover:text-blue-300"><FileJson size={14}/></a> ) : <span className="text-slate-700">-</span>}</div></div> ))}</div></div>
             </div>
           )}
 
@@ -453,7 +502,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                  <button onClick={()=>{navigator.clipboard.writeText(REQUIRED_SQL);alert("Copied!")}} className="absolute top-2 right-2 bg-blue-600 text-white px-3 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity">Copy SQL</button>
                  <pre className="text-[10px] text-green-400 font-mono h-full overflow-y-auto custom-scrollbar">{REQUIRED_SQL}</pre>
                </div>
-               <p className="text-center text-xs text-slate-500 mt-4">Jalankan script di atas di Supabase SQL Editor untuk fitur Memori & Log.</p>
+               <p className="text-center text-xs text-slate-500 mt-4">Jalankan script di atas di Supabase SQL Editor untuk Update Sistem Langganan & Cleanup Database.</p>
              </div>
           )}
         </div>

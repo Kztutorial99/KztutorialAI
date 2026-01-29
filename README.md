@@ -1,144 +1,320 @@
-# 🤖 Kz.tutorial AI Coding Assistant (V1.0)
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![React](https://img.shields.io/badge/React-19-61DAFB)
-![Supabase](https://img.shields.io/badge/Supabase-Database-3ECF8E)
-![Groq](https://img.shields.io/badge/AI-Llama%203.3-orange)
-![Tailwind](https://img.shields.io/badge/Tailwind-CSS-38B2AC)
+<div align="center">
 
-Aplikasi Web **AI Coding Assistant** profesional yang dibangun dengan arsitektur modern (React 19 + Supabase). Dirancang khusus untuk developer dengan fitur analisis gambar (Vision), pencarian web real-time, sistem ekonomi kredit, dan dashboard admin tersembunyi.
+# 🤖 KZ.TUTORIAL AI CODING ASSISTANT
+### The Ultimate AI Companion for Developers & Termux Users
 
----
+![Version](https://img.shields.io/badge/Version-2.0.0-blue?style=for-the-badge&logo=git)
+![Status](https://img.shields.io/badge/Status-Production%20Ready-success?style=for-the-badge)
+![AI Model](https://img.shields.io/badge/AI-Llama%203.3%20(70B)-orange?style=for-the-badge&logo=meta)
 
-## 🌟 Fitur Utama
+![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=for-the-badge&logo=typescript)
+![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=for-the-badge&logo=supabase)
+![Tailwind](https://img.shields.io/badge/UI-Tailwind%20CSS-38B2AC?style=for-the-badge&logo=tailwindcss)
 
-### 🧑‍💻 Fitur Pengguna
-- **Multi-Model Intelligence**:
-  - **Llama 3.1 8B**: Chat super cepat untuk pertanyaan ringan (Biaya: 1 Kredit).
-  - **Llama 3.3 70B**: Logika tingkat tinggi untuk coding kompleks (Biaya: 2 Kredit).
-  - **Mata Dewa (Vision)**: Analisis screenshot error menggunakan **Llama 4 Scout 17B**.
-- **Web Search Real-time**: Terintegrasi dengan Serper API untuk mencari dokumentasi terbaru.
-- **Sistem Gamifikasi**:
-  - **Daily Check-in**: Absen harian untuk mendapatkan bonus kredit gratis (Streak 7 hari).
-  - **Referral System**: Undang teman dan dapatkan +10 kredit (Dilengkapi proteksi Fingerprint).
-- **UI/UX Premium**:
-  - **Terminal Mode**: Tampilan ala Hacker/CLI untuk pecinta minimalisme.
-  - **Markdown & Syntax Highlighting**: Blok kode rapi dengan fitur sekali klik salin.
-  - **Inbox Notifikasi**: Pemberitahuan real-time dari sistem atau admin.
+<p align="center">
+  <a href="#-fitur-utama">Fitur</a> •
+  <a href="#-instalasi">Instalasi</a> •
+  <a href="#-database-setup-penting">Database</a> •
+  <a href="#-akses-admin-rahasia">Admin Mode</a>
+</p>
 
-### 🛡️ Fitur Admin (Tersembunyi)
-- **Akses Rahasia**: Ketik `modeadmin` di kolom chat untuk membuka login PIN (Default: `2719`).
-- **Manajemen API Key**: Tambah/Hapus key Groq & Serper secara dinamis tanpa deploy ulang.
-- **Approval Pembayaran**: Sistem verifikasi bukti transfer (QRIS/PayPal) secara manual.
-- **Broadcast System**: Kirim pengumuman atau bonus kredit ke seluruh user sekaligus.
-- **Live Monitoring**: Pantau kesehatan API key (latency/error) dan log sistem.
+</div>
 
 ---
 
-## 🛠️ Persiapan & Instalasi
+## ⚡ Overview
 
-### 1. Prasyarat
-- Akun **Supabase** (Gratis).
-- API Key dari **Groq Cloud**.
-- (Opsional) API Key dari **Serper.dev** untuk fitur Search.
+**Kz.tutorial AI** bukan sekadar chatbot biasa. Ini adalah **Platform Asisten Coding Full-Stack** yang dibangun dengan arsitektur modern. Menggabungkan kecepatan **Groq API**, memori jangka panjang via **Supabase Vector**, dan kemampuan **Computer Vision** untuk menganalisis error langsung dari screenshot.
 
-### 2. Konfigurasi Client
-Buka file `services/supabaseClient.ts` dan masukkan kredensial project Anda:
-```typescript
-const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
-const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+Didesain khusus dengan **"Terminal Mode"** untuk pengguna Termux dan **"GUI Mode"** untuk pengguna Desktop/Mobile.
+
+---
+
+## 🚀 Fitur Utama
+
+| Fitur | Deskripsi | Teknologi |
+| :--- | :--- | :--- |
+| **🧠 Multi-Model AI** | Otomatis beralih antara Llama 3.1 (Cepat) & Llama 3.3 (Cerdas) berdasarkan kompleksitas query. | `Groq Cloud` |
+| **👁️ Mata Dewa (Vision)** | Upload screenshot error/kodingan, AI akan menganalisis visualnya secara mendalam. | `Llama 3.2 Vision` |
+| **🌐 Web Search Real-time** | AI dapat mencari dokumentasi terbaru dari internet (Live Data). | `Serper.dev` |
+| **⏳ Anti-Zonk Rate Limiting** | Sistem antrian cerdas: Premium (3s delay) vs Free (10s delay) untuk mencegah ban API. | `Custom Logic` |
+| **💾 Context Memory** | AI mengingat detail project dan preferensi coding Anda sebelumnya. | `Supabase JSONB` |
+| **💳 Sistem Langganan** | Integrasi pembayaran QRIS (IDR) & PayPal (USD) dengan sistem verifikasi manual admin. | `RLS Policies` |
+| **🖥️ Terminal Mode** | UI khusus bertema Matrix/Hacker untuk kenyamanan pengguna Termux. | `CSS CRT Effect` |
+
+---
+
+## 🛠 Instalasi
+
+Ikuti langkah-langkah ini untuk menjalankan project di local environment Anda.
+
+### 1. Clone Repository
+```bash
+git clone https://github.com/username/kz-ai-assistant.git
+cd kz-ai-assistant
 ```
 
+### 2. Install Dependencies
+```bash
+npm install
+# atau
+yarn install
+```
+
+### 3. Konfigurasi Environment
+Edit file `services/supabaseClient.ts` dan masukkan kredensial Supabase Anda:
+```typescript
+const SUPABASE_URL = 'https://YOUR-PROJECT-ID.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR-ANON-KEY';
+```
+
+### 4. Jalankan Server
+```bash
+npm start
+```
+Akses aplikasi di `http://localhost:3000`.
+
 ---
 
-## 🗄️ Konfigurasi Database (Wajib)
+## 🗄️ Database Setup (PENTING!)
 
-Salin dan jalankan script SQL berikut di **Supabase SQL Editor** untuk membangun struktur tabel dan logika fungsi (RPC):
+**PILIH SATU SKENARIO DI BAWAH INI:**
 
-### Langkah 1: Tabel Utama & Auth Trigger
+### A. Fresh Install (Project Baru)
+Jalankan script ini jika Anda **belum pernah** membuat tabel apapun di Supabase.
+
+<details>
+<summary><b>Klik untuk melihat Script Fresh Install</b></summary>
+
 ```sql
--- Profiles: Data Kredit & Referral
-create table public.profiles (
-  id uuid references auth.users not null primary key,
+-- 1. SETUP TABEL PROFILES & TRIGGER AUTH
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id uuid REFERENCES auth.users NOT NULL PRIMARY KEY,
   email text,
   full_name text,
-  credits int default 15,
-  referral_code text unique,
-  created_at timestamptz default now()
+  is_premium boolean DEFAULT false,
+  premium_until timestamptz,
+  daily_usage int DEFAULT 0,
+  last_reset date DEFAULT CURRENT_DATE,
+  referral_code text UNIQUE,
+  created_at timestamptz DEFAULT now()
 );
 
--- Otomatis buat profil saat registrasi
-create or replace function public.handle_new_user() 
-returns trigger as $$
-begin
-  insert into public.profiles (id, email, full_name, referral_code)
-  values (new.id, new.email, new.raw_user_meta_data->>'full_name', upper(substring(md5(random()::text) from 1 for 8)));
-  return new;
-end;
-$$ language plpgsql security definer;
+-- Trigger: Otomatis buat profil + KIRIM NOTIFIKASI SELAMAT DATANG
+CREATE OR REPLACE FUNCTION public.handle_new_user() 
+RETURNS trigger AS $$
+BEGIN
+  -- 1. Buat Profil
+  INSERT INTO public.profiles (id, email, full_name, referral_code)
+  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', upper(substring(md5(random()::text) FROM 1 FOR 8)));
+  
+  -- 2. Kirim Notifikasi Welcome (Free Tier)
+  INSERT INTO public.notifications (user_id, title, message, type)
+  VALUES (
+    new.id,
+    '🎉 Akun Berhasil Dibuat!',
+    'Selamat datang di Kz.tutorial AI! Nikmati Free Tier dengan limit 20 Chat/Hari. Upgrade ke Premium untuk akses tanpa batas.',
+    'system'
+  );
+  
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
-create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
--- Tabel Pendukung lainnya
-create table public.system_settings (id int primary key generated by default as identity, groq_api_keys text[], serper_api_key text);
-insert into public.system_settings (groq_api_keys, serper_api_key) values (ARRAY[''], '');
+-- 2. TABEL SISTEM
+CREATE TABLE IF NOT EXISTS public.system_settings (id int PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY, groq_api_keys text[], serper_api_key text);
+INSERT INTO public.system_settings (groq_api_keys, serper_api_key) VALUES (ARRAY[''], '') ON CONFLICT DO NOTHING;
 
-create table public.topup_requests (id uuid default gen_random_uuid() primary key, user_id uuid references public.profiles(id), amount int, price int, status text default 'pending', proof_url text, currency text, created_at timestamptz default now());
-create table public.notifications (id uuid default gen_random_uuid() primary key, user_id uuid references public.profiles(id), title text, message text, type text, is_read boolean default false, created_at timestamptz default now());
-create table public.user_streaks (user_id uuid references public.profiles(id) primary key, current_streak int default 0, last_claim_at timestamptz);
-create table public.referrals (id uuid default gen_random_uuid() primary key, referrer_id uuid references public.profiles(id), referee_id uuid references public.profiles(id), device_id text, created_at timestamptz default now());
+CREATE TABLE IF NOT EXISTS public.topup_requests (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, user_id uuid REFERENCES public.profiles(id), amount int, price int, status text DEFAULT 'pending', proof_url text, currency text, created_at timestamptz DEFAULT now());
+CREATE TABLE IF NOT EXISTS public.notifications (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, user_id uuid REFERENCES public.profiles(id), title text, message text, type text, is_read boolean DEFAULT false, created_at timestamptz DEFAULT now());
+CREATE TABLE IF NOT EXISTS public.user_memories (user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE, memories jsonb DEFAULT '[]'::jsonb, updated_at timestamptz DEFAULT now());
+CREATE TABLE IF NOT EXISTS public.system_logs (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, level text, action text, message text, meta jsonb DEFAULT '{}'::jsonb, created_at timestamptz DEFAULT now());
+CREATE TABLE IF NOT EXISTS public.api_key_usage (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, api_key text UNIQUE NOT NULL, usage_count int DEFAULT 0, last_used_at timestamptz DEFAULT now());
+
+-- 3. SECURITY POLICIES (RLS)
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
+CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+
+ALTER TABLE public.user_memories ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can manage their own memories" ON public.user_memories;
+CREATE POLICY "Users can manage their own memories" ON public.user_memories FOR ALL USING (auth.uid() = user_id);
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can view own notifications" ON public.notifications;
+CREATE POLICY "Users can view own notifications" ON public.notifications FOR SELECT USING (auth.uid() = user_id);
+
+-- 4. LOGIC: CEK LIMIT & SUBSCRIPTION
+CREATE OR REPLACE FUNCTION public.check_and_increment_usage(p_user_id uuid)
+RETURNS json AS $$
+DECLARE
+  v_profile record;
+  v_limit int := 20; -- Limit Harian Free User
+BEGIN
+  SELECT * INTO v_profile FROM public.profiles WHERE id = p_user_id;
+
+  -- Reset Limit jika hari berganti
+  IF v_profile.last_reset < CURRENT_DATE THEN
+    UPDATE public.profiles SET daily_usage = 0, last_reset = CURRENT_DATE WHERE id = p_user_id;
+    v_profile.daily_usage := 0; 
+  END IF;
+
+  -- Cek Premium
+  IF v_profile.is_premium = true AND v_profile.premium_until > now() THEN
+     RETURN json_build_object('allowed', true, 'status', 'premium', 'usage', v_profile.daily_usage);
+  END IF;
+
+  -- Cek Limit Free
+  IF v_profile.daily_usage >= v_limit THEN
+     RETURN json_build_object('allowed', false, 'message', 'Limit Harian Habis (20/20). Upgrade ke Premium!');
+  END IF;
+
+  -- Increment Usage
+  UPDATE public.profiles SET daily_usage = daily_usage + 1 WHERE id = p_user_id;
+  RETURN json_build_object('allowed', true, 'status', 'free', 'usage', v_profile.daily_usage + 1);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 5. LOGIC: ADMIN APPROVE TOPUP
+DROP FUNCTION IF EXISTS public.admin_approve_topup(uuid, uuid, int);
+
+CREATE OR REPLACE FUNCTION public.admin_approve_topup(request_id uuid, target_user_id uuid, duration_days int) 
+RETURNS json AS $$
+DECLARE 
+  v_new_expiry timestamptz;
+  v_current_expiry timestamptz;
+BEGIN
+  SELECT premium_until INTO v_current_expiry FROM public.profiles WHERE id = target_user_id;
+  
+  IF v_current_expiry > now() THEN
+    v_new_expiry := v_current_expiry + (duration_days || ' days')::interval;
+  ELSE
+    v_new_expiry := now() + (duration_days || ' days')::interval;
+  END IF;
+
+  UPDATE public.profiles SET is_premium = true, premium_until = v_new_expiry WHERE id = target_user_id;
+  UPDATE public.topup_requests SET status = 'approved' WHERE id = request_id;
+  INSERT INTO public.notifications (user_id, title, message, type) VALUES (target_user_id, '✅ Premium Aktif!', 'Paket Premium ' || duration_days || ' hari berhasil diaktifkan.', 'payment');
+
+  RETURN json_build_object('success', true, 'new_expiry', v_new_expiry);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 6. LOGIC: ADMIN REJECT TOPUP
+CREATE OR REPLACE FUNCTION public.admin_reject_topup(request_id uuid, target_user_id uuid) 
+RETURNS void AS $$
+BEGIN
+  UPDATE public.topup_requests SET status = 'rejected' WHERE id = request_id;
+  INSERT INTO public.notifications (user_id, title, message, type) VALUES (target_user_id, '❌ Pembayaran Ditolak', 'Bukti pembayaran tidak valid. Silakan coba lagi.', 'payment');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
+</details>
 
-### Langkah 2: Fungsi Bisnis (RPC)
+### B. Update/Migration (Jika Sudah Ada Database)
+Jalankan script ini jika Anda melihat error `ERROR: 42P07: relation "profiles" already exists` atau ingin membersihkan database dari fitur lama.
+
+<details>
+<summary><b>Klik untuk melihat Script Migration & Cleanup</b></summary>
+
 ```sql
--- Fungsi Absen Harian
-create or replace function claim_daily_bonus() returns json as $$
-declare v_user_id uuid := auth.uid(); v_streak int; v_last_claim timestamptz; v_bonus int := 1;
-begin
-  select current_streak, last_claim_at into v_streak, v_last_claim from public.user_streaks where user_id = v_user_id;
-  if not found then insert into public.user_streaks (user_id, current_streak, last_claim_at) values (v_user_id, 1, now()); update public.profiles set credits = credits + 1 where id = v_user_id; return json_build_object('success', true, 'message', 'Bonus harian diklaim! +1 Kredit', 'streak', 1); end if;
-  if v_last_claim::date = now()::date then return json_build_object('success', false, 'message', 'Sudah absen hari ini.'); end if;
-  v_streak := case when v_last_claim::date = (now() - interval '1 day')::date then v_streak + 1 else 1 end;
-  if v_streak % 7 = 0 then v_bonus := 5; end if;
-  update public.user_streaks set current_streak = v_streak, last_claim_at = now() where user_id = v_user_id;
-  update public.profiles set credits = credits + v_bonus where id = v_user_id;
-  return json_build_object('success', true, 'message', 'Absen Berhasil! +' || v_bonus || ' Kredit', 'streak', v_streak);
-end;
-$$ language plpgsql security definer;
+-- 1. FIX: NOTIFIKASI SELAMAT DATANG (HAPUS PESAN KREDIT LAMA)
+CREATE OR REPLACE FUNCTION public.handle_new_user() 
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, referral_code)
+  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', upper(substring(md5(random()::text) FROM 1 FOR 8)));
+  
+  -- Kirim Notifikasi Selamat Datang (YANG BENAR)
+  INSERT INTO public.notifications (user_id, title, message, type)
+  VALUES (
+    new.id,
+    '🎉 Akun Berhasil Dibuat!',
+    'Selamat datang di Kz.tutorial AI! Nikmati Free Tier dengan limit 20 Chat/Hari. Upgrade ke Premium untuk akses tanpa batas.',
+    'system'
+  );
+  
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Fungsi Klaim Referral
-create or replace function claim_referral(code_input text, device_id_input text) returns json as $$
-declare v_user_id uuid := auth.uid(); v_referrer_id uuid;
-begin
-  select id into v_referrer_id from public.profiles where referral_code = code_input;
-  if v_referrer_id = v_user_id or v_referrer_id is null then return json_build_object('success', false, 'message', 'Kode tidak valid.'); end if;
-  if exists (select 1 from public.referrals where referee_id = v_user_id) then return json_build_object('success', false, 'message', 'Sudah pernah klaim.'); end if;
-  insert into public.referrals (referrer_id, referee_id, device_id) values (v_referrer_id, v_user_id, device_id_input);
-  update public.profiles set credits = credits + 10 where id in (v_user_id, v_referrer_id);
-  return json_build_object('success', true, 'message', 'Klaim berhasil! +10 Kredit.');
-end;
-$$ language plpgsql security definer;
+-- 2. UPDATE STRUKTUR TABLE PROFILES
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_premium boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS premium_until timestamptz;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS daily_usage int DEFAULT 0;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_reset date DEFAULT CURRENT_DATE;
+
+-- 3. HAPUS KOLOM SAMPAH (OPTIONAL: HANYA JIKA INGIN BERSIH)
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS credits;
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS tier;
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS is_admin;
+ALTER TABLE public.system_settings DROP COLUMN IF EXISTS maintenance_mode;
+ALTER TABLE public.notifications DROP COLUMN IF EXISTS action_url;
+
+-- 4. UPDATE/CREATE TABLE PENDUKUNG
+CREATE TABLE IF NOT EXISTS public.system_logs (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, level text, action text, message text, meta jsonb DEFAULT '{}'::jsonb, created_at timestamptz DEFAULT now());
+CREATE TABLE IF NOT EXISTS public.api_key_usage (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, api_key text UNIQUE NOT NULL, usage_count int DEFAULT 0, last_used_at timestamptz DEFAULT now());
+
+-- 5. UPDATE LOGIC FUNCTION (JALANKAN ULANG)
+CREATE OR REPLACE FUNCTION public.check_and_increment_usage(p_user_id uuid)
+RETURNS json AS $$
+DECLARE
+  v_profile record;
+  v_limit int := 20; -- Limit Harian Free User
+BEGIN
+  SELECT * INTO v_profile FROM public.profiles WHERE id = p_user_id;
+  IF v_profile.last_reset < CURRENT_DATE THEN
+    UPDATE public.profiles SET daily_usage = 0, last_reset = CURRENT_DATE WHERE id = p_user_id;
+    v_profile.daily_usage := 0; 
+  END IF;
+  IF v_profile.is_premium = true AND v_profile.premium_until > now() THEN
+     RETURN json_build_object('allowed', true, 'status', 'premium', 'usage', v_profile.daily_usage);
+  END IF;
+  IF v_profile.daily_usage >= v_limit THEN
+     RETURN json_build_object('allowed', false, 'message', 'Limit Harian Habis (20/20). Upgrade ke Premium!');
+  END IF;
+  UPDATE public.profiles SET daily_usage = daily_usage + 1 WHERE id = p_user_id;
+  RETURN json_build_object('allowed', true, 'status', 'free', 'usage', v_profile.daily_usage + 1);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
+</details>
 
 ---
 
-## 📦 Konfigurasi Storage Supabase
-Buat bucket berikut di dashboard Supabase:
-1. `payment_proofs`: (Public) Tempat menyimpan bukti transfer user.
-2. `QRIS_PAYMENT`: (Public) Simpan gambar QRIS Anda dengan nama `qris.png`.
+## 🛡️ Akses Admin (Rahasia)
+
+Aplikasi ini memiliki **Hidden Admin Panel** untuk mengelola API Key dan Keuangan.
+
+1.  Login ke aplikasi sebagai user biasa.
+2.  Ketik perintah ini di kolom chat:
+    ```bash
+    modeadmin
+    ```
+3.  Masukkan PIN Keamanan Sistem:
+    ```
+    2719
+    ```
+4.  **Boom!** Anda sekarang memiliki akses root ke dashboard admin.
 
 ---
 
-## 🔑 Akses Dashboard Admin
-Dashboard admin disembunyikan untuk alasan keamanan.
-1. Login ke aplikasi.
-2. Ketik **`modeadmin`** di kolom chat.
-3. Masukkan PIN: **`2719`**.
-4. Di sini Anda wajib memasukkan **API Key Groq** agar AI bisa mulai menjawab.
+## 🤝 Kontribusi
 
----
+Project ini bersifat Open Source untuk tujuan edukasi. Jangan ragu untuk melakukan fork dan pull request.
 
-## 📜 Lisensi
-Project ini berada di bawah lisensi **MIT**. Anda bebas menggunakannya untuk keperluan edukasi maupun komersial dengan tetap mencantumkan atribusi ke **Kz.tutorial**.
+**Credits:**
+Created with ❤️ by **Kz.tutorial**.
 
-**Dibuat dengan ❤️ oleh Kz.tutorial**
+<div align="center">
+  <img src="https://media.giphy.com/media/hrRJ41JB2zlgpTpXeO/giphy.gif" width="50px">
+  <br>
+  <i>"Code like a pro, think like a master."</i>
+</div>

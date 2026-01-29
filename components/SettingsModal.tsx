@@ -1,11 +1,9 @@
 
 import React, { useState } from 'react';
-import { X, LogOut, User, CreditCard, Shield, Zap, Terminal, Smartphone, Gift, Cpu, Mail, Lock, FileText, HelpCircle, Eye, EyeOff } from 'lucide-react';
+import { X, LogOut, User, CreditCard, Shield, Zap, Terminal, Smartphone, Gift, Cpu, Mail, Lock, FileText, HelpCircle, Eye, EyeOff, Crown } from 'lucide-react';
 import { AppSettings } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabaseClient';
-import { DailyCheckIn } from './DailyCheckIn';
-import { ReferralSystem } from './ReferralSystem';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -31,6 +29,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [msg, setMsg] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  // Helper Check Premium
+  const isPremium = profile?.is_premium && profile.premium_until && new Date(profile.premium_until) > new Date();
+  const premiumExpiry = profile?.premium_until ? new Date(profile.premium_until).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'}) : '-';
+
+  // FIX NAME DISPLAY: Gunakan Nama Profile, jika kosong gunakan bagian depan email, jika tidak ada gunakan 'User'
+  const displayName = profile?.full_name || profile?.email?.split('@')[0] || 'User';
+
   if (!isOpen) return null;
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -44,20 +49,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         await refreshProfile(); 
         onClose(); 
       } else if (authMode === 'signup') {
-        // FIX: Tambahkan emailRedirectTo agar link verifikasi valid sesuai environment (Local/Prod)
         const { error } = await supabase.auth.signUp({
           email, 
           password, 
           options: { 
-            data: { full_name: fullName },
-            emailRedirectTo: window.location.origin // Sangat penting!
+            // Pastikan full_name terkirim ke metadata
+            data: { full_name: fullName || email.split('@')[0] },
+            emailRedirectTo: window.location.origin 
           }
         });
         if (error) throw error;
         if (onSignUpSuccess) onSignUpSuccess(email);
         else setMsg('✅ Link verifikasi telah dikirim ke email Anda!');
       } else {
-        // FIX: Gunakan dynamic origin agar redirect reset password tidak gagal
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}`, 
         });
@@ -95,7 +99,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {authMode === 'signup' && (
                 <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-xl mb-4 text-center">
                   <p className="text-blue-400 font-bold text-sm flex items-center justify-center gap-2">
-                    <Gift size={16} /> Daftar & Dapat 15 Kredit Gratis!
+                    <Gift size={16} /> Daftar & Dapatkan Free Plan!
                   </p>
                 </div>
               )}
@@ -167,29 +171,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="space-y-6 p-6 animate-in fade-in duration-300">
               <div className="bg-gradient-to-r from-blue-900/40 to-purple-900/40 p-4 rounded-xl border border-blue-500/30 flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-xl font-bold text-white shadow-lg">
-                  {profile?.full_name?.charAt(0).toUpperCase() || 'U'}
+                  {displayName.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-white font-bold truncate">{profile?.full_name || 'User'}</h3>
+                  <h3 className="text-white font-bold truncate">{displayName}</h3>
                   <p className="text-xs text-slate-400 truncate">{profile?.email}</p>
                 </div>
               </div>
 
               <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 flex flex-col gap-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-400 text-sm font-medium">Sisa Kredit</span>
-                  <span className="text-2xl font-bold text-green-400 flex items-center gap-1">
-                    <Zap size={20} fill="currentColor" /> {profile?.credits || 0}
+                  <span className="text-slate-400 text-sm font-medium">Status Akun</span>
+                  <span className={`text-sm font-bold flex items-center gap-1 ${isPremium ? 'text-yellow-400' : 'text-slate-300'}`}>
+                    {isPremium ? <Crown size={16} fill="currentColor" /> : <User size={16} />}
+                    {isPremium ? 'Premium' : 'Free Tier'}
                   </span>
                 </div>
-                <button onClick={onOpenTopUp} className="w-full bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/50 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 shadow-sm">
-                  <CreditCard size={16} /> Beli Kredit
-                </button>
-              </div>
 
-              <div className="space-y-4">
-                <DailyCheckIn userId={session.user.id} onCreditsUpdate={refreshProfile} />
-                <ReferralSystem userId={session.user.id} onCreditsUpdate={refreshProfile} />
+                {isPremium ? (
+                  <div className="text-xs text-slate-500 bg-slate-900/50 p-2 rounded">
+                    Berakhir pada: <span className="text-white font-bold">{premiumExpiry}</span>
+                  </div>
+                ) : (
+                   <div className="flex justify-between text-xs text-slate-500 bg-slate-900/50 p-2 rounded">
+                      <span>Limit Harian:</span>
+                      <span className="text-white font-bold">{profile?.daily_usage || 0} / 20 Chat</span>
+                   </div>
+                )}
+
+                <button onClick={onOpenTopUp} className={`w-full py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 shadow-sm ${isPremium ? 'bg-slate-700 text-slate-300' : 'bg-green-600 hover:bg-green-500 text-white'}`}>
+                  {isPremium ? 'Perpanjang Premium' : 'Upgrade ke Premium'}
+                </button>
               </div>
 
               <div className="pt-4 border-t border-slate-800 space-y-4">

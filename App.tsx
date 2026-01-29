@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from './services/supabaseClient';
 import { ChatInterface } from './components/ChatInterface';
@@ -59,6 +58,10 @@ const MainApp: React.FC = () => {
   const isStreamingRef = useRef(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // --- COOLDOWN STATE (NEW) ---
+  const [cooldownTimer, setCooldownTimer] = useState(0);
+  const lastMessageTimeRef = useRef<number>(0);
+
   const fetchSystemKeys = useCallback(async () => {
     try {
       const { data } = await supabase.from('system_settings').select('groq_api_keys, serper_api_key').limit(1).single();
@@ -86,6 +89,16 @@ const MainApp: React.FC = () => {
     else setIsProfileLoading(false);
   }, [session, profile]);
 
+  // Handle Cooldown Timer Decrement
+  useEffect(() => {
+    if (cooldownTimer > 0) {
+      const interval = setInterval(() => {
+        setCooldownTimer((prev) => prev - 1);
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [cooldownTimer]);
+
   const checkUnread = useCallback(async () => {
     if (!session) return;
     const { count } = await supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', session.user.id).eq('is_read', false);
@@ -101,39 +114,47 @@ const MainApp: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [session, checkUnread]);
 
-  /**
-   * Helper untuk membersihkan tag memori dari tampilan UI
-   */
   const cleanResponseText = (text: string) => {
-    // Regex ini nanti juga akan membersihkan ACTION dan STATS di komponen UI
-    // Tapi untuk raw message, kita bersihkan SAVE_MEMORY saja
     return text.replace(/\[SAVE_MEMORY: .*?\]/g, '').trim();
   };
 
   const handleSendMessage = async (content: string, isAnalysis: boolean = false, isSearch: boolean = false, imageBase64?: string) => {
     if (!session) { setShowSettingsModal(true); return; }
+    
+    // --- COOLDOWN CHECK ---
+    const now = Date.now();
+    const isPremium = profile?.is_premium && profile.premium_until && new Date(profile.premium_until) > new Date();
+    
+    // Strategi Anti-Zonk: VIP 3 detik, Free 10 detik
+    const cooldownDuration = isPremium ? 3000 : 10000; 
+    const timeSinceLast = now - lastMessageTimeRef.current;
+
+    if (timeSinceLast < cooldownDuration && lastMessageTimeRef.current !== 0) {
+       // Should be handled by UI disabled state, but double check here to be safe
+       return;
+    }
+
     if (content.toLowerCase().trim() === ADMIN_TRIGGER_KEYWORD) { setShowAdminModal(true); return; }
     if (apiKeys.length === 0) {
       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `⚠️ **SISTEM BELUM DIKONFIGURASI**\n\nAdmin belum memasukkan API Key.`, timestamp: Date.now() }]);
       return;
     }
 
-    let cost = isAnalysis ? 2 : 1;
-    if (imageBase64) cost = 1;
-    
-    try {
-      const { data: lp } = await supabase.from('profiles').select('credits').eq('id', session.user.id).single();
-      if (!lp || lp.credits < cost) {
-         setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `⚠️ **SALDO KURANG**`, timestamp: Date.now() }]);
-         setShowTopUpModal(true);
-         return;
-      }
-    } catch (err) { return; }
+    // Check credits/subscription (handled mostly by backend logic now, but simple check here)
+    // We rely on backend 'check_and_increment_usage' which is called inside streamGroqRequest for limit enforcement.
+    // However, if we want to block UI for credits we can keep this or rely on backend error.
+    // Let's rely on backend error for accuracy or simple pre-check if we had credits field, but we switched to daily_usage.
+    // We will let streamGroqRequest handle the detailed check.
 
     const userContentForUI = imageBase64 ? `![User Image](${imageBase64})\n\n${content}` : content;
     const newUserMsg: Message = { id: Date.now().toString(), role: 'user', content: userContentForUI, timestamp: Date.now() };
     setMessages(prev => [...prev, newUserMsg]);
-    setIsLoading(true); isStreamingRef.current = true;
+    setIsLoading(true); 
+    isStreamingRef.current = true;
+    
+    // UPDATE LAST MESSAGE TIME & START COOLDOWN
+    lastMessageTimeRef.current = Date.now(); 
+    setCooldownTimer(cooldownDuration / 1000);
 
     const selectedModelId = imageBase64 ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.3-70b-versatile';
     const aiMsgId = (Date.now() + 1).toString();
@@ -165,23 +186,17 @@ const MainApp: React.FC = () => {
 
       setMessages(prev => [...prev, { id: aiMsgId, role: 'assistant', content: '', timestamp: Date.now() }]);
 
-      // UPDATE: Pass profile.credits ke streamGroqRequest
-      const stream = streamGroqRequest(apiMessages, apiKeys, selectedModelId, session.user.id, profile?.credits || 0);
+      // Note: userCredits param is legacy/ignored inside streamGroqRequest now
+      const stream = streamGroqRequest(apiMessages, apiKeys, selectedModelId, session.user.id, 0);
       let fullContent = '';
       for await (const chunk of stream) {
         if (!isStreamingRef.current) break;
         fullContent += chunk;
-        
-        // Bersihkan tag dari tampilan UI secara real-time
         const cleanedContent = cleanResponseText(fullContent);
         setMessages(prev => prev.map(m => m.id === aiMsgId ? { ...m, content: cleanedContent } : m));
       }
-
-      if (session) {
-        const { data: currentP } = await supabase.from('profiles').select('credits').eq('id', session.user.id).single();
-        if (currentP) await supabase.from('profiles').update({ credits: Math.max(0, currentP.credits - cost) }).eq('id', session.user.id);
-        refreshProfile();
-      }
+      
+      refreshProfile(); // Refresh usage stats
     } catch (err: any) {
       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `**ERROR:** ${err.message}`, timestamp: Date.now() }]);
     } finally {
@@ -212,7 +227,8 @@ const MainApp: React.FC = () => {
           unreadCount={unreadCount} 
           error={error} settings={settings} userCredits={profile?.credits || 0}
           isProfileLoading={isProfileLoading}
-          onOpenTopUp={() => setShowTopUpModal(true)} // Prop baru untuk Action Button
+          onOpenTopUp={() => setShowTopUpModal(true)}
+          cooldownTimer={cooldownTimer} // Pass timer
         />
       )}
       <AdminModal isOpen={showAdminModal} onClose={() => setShowAdminModal(false)} onSuccess={() => setView('admin')} />

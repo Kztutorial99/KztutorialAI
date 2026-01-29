@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { Session } from '@supabase/supabase-js';
@@ -6,7 +7,11 @@ interface Profile {
   id: string;
   email: string;
   full_name: string;
-  credits: number;
+  // New Fields for Subscription
+  is_premium: boolean;
+  premium_until: string | null;
+  daily_usage: number;
+  last_reset: string;
 }
 
 interface AuthContextType {

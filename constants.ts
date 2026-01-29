@@ -46,3 +46,40 @@ export const SYSTEM_PROMPT = `You are "AI ASISTEN", a Senior Full-Stack Develope
 export const ADMIN_PIN = '2719';
 export const ADMIN_TRIGGER_KEYWORD = 'modeadmin';
 export const MODEL_ID = 'llama-3.3-70b-versatile';
+
+export const APP_NAME = 'Kztutorial AI';
+export const APP_DESCRIPTION = 'Asisten Coding Pintar untuk Developer Termux & Python';
+
+// --- PAKET LANGGANAN (NEW) ---
+export const SUBSCRIPTION_PACKAGES = [
+  {
+    id: 'basic_pack',
+    name: 'Basic',
+    duration_days: 3,
+    price_idr: 25000,
+    price_usd: 1.99,
+    description: 'Solusi cepat. Cocok buat debugging tugas dadakan.',
+    popular: false,
+    color: 'blue'
+  },
+  {
+    id: 'medium_pack',
+    name: 'Medium',
+    duration_days: 7,
+    price_idr: 50000,
+    price_usd: 3.99,
+    description: 'Paling Laris! Seminggu full akses tanpa mikir kuota.',
+    popular: true,
+    color: 'purple'
+  },
+  {
+    id: 'pro_pack',
+    name: 'PRO',
+    duration_days: 30,
+    price_idr: 150000,
+    price_usd: 9.99,
+    description: 'Best Value. Akses sebulan penuh untuk project besar.',
+    popular: false,
+    color: 'orange'
+  }
+];

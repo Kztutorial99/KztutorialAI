@@ -1,3 +1,4 @@
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -27,19 +28,18 @@ export type ViewMode = 'chat' | 'admin_dashboard';
 export interface AppSettings {
   terminalMode: boolean; // Matrix/Hacker style
   hapticEnabled: boolean; // Vibration on message
-  // selectedModel dihapus karena sekarang otomatis
 }
 
 export interface TopupRequest {
   id: string;
   user_id: string;
-  amount: number;
+  amount: number; // Disini 'amount' kita pakai untuk menyimpan DURASI HARI (3, 7, atau 30)
   price: number;
   payment_method: string;
   proof_url: string;
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
-  currency?: 'IDR' | 'USD'; // Field baru untuk mata uang
+  currency?: 'IDR' | 'USD'; 
   profiles?: {
     full_name: string;
     email: string;
@@ -61,15 +61,15 @@ export const AI_MODELS = [
   { 
     id: 'llama-3.1-8b-instant', 
     name: '⚡ Llama 3.1 8B (Cepat)', 
-    desc: 'Respons Kilat, Hemat. Cocok untuk chat ringan.', 
-    cost: 1,
-    info: '1 Kredit/Pesan'
+    desc: 'Respons Kilat, Hemat.', 
+    cost: 0,
+    info: 'Free Tier'
   },
   { 
     id: 'llama-3.3-70b-versatile', 
     name: '🧠 Llama 3.3 70B (Pintar)', 
-    desc: 'Logika Tinggi. Digunakan otomatis saat Mode Analisis.', 
-    cost: 3,
-    info: '3 Kredit/Pesan'
+    desc: 'Logika Tinggi. Premium Only.', 
+    cost: 0,
+    info: 'Premium'
   }
 ];
