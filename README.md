@@ -115,7 +115,7 @@ BEGIN
   VALUES (
     new.id,
     '🎉 Akun Berhasil Dibuat!',
-    'Selamat datang di Kz.tutorial AI! Nikmati Free Tier dengan limit 20 Chat/Hari. Upgrade ke Premium untuk akses tanpa batas.',
+    'Selamat datang di Kz.tutorial AI! Akun Anda aktif dengan paket Free Tier (20 Chat/Hari). Upgrade ke Premium untuk akses tanpa batas.',
     'system'
   );
   
@@ -237,7 +237,7 @@ BEGIN
   VALUES (
     new.id,
     '🎉 Akun Berhasil Dibuat!',
-    'Selamat datang di Kz.tutorial AI! Nikmati Free Tier dengan limit 20 Chat/Hari. Upgrade ke Premium untuk akses tanpa batas.',
+    'Selamat datang di Kz.tutorial AI! Akun Anda aktif dengan paket Free Tier (20 Chat/Hari). Upgrade ke Premium untuk akses tanpa batas.',
     'system'
   );
   

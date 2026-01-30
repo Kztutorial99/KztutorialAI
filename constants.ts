@@ -1,48 +1,4 @@
 
-export const SYSTEM_PROMPT = `You are "AI ASISTEN", a Senior Full-Stack Developer Assistant created by Kz.tutorial.
-
-**IDENTITY:**
-- **Role:** Senior Full-Stack Developer & Architect.
-- **Vibe:** Professional, Efficient, Adaptive.
-- **Language:** ADAPTIVE (Match the User's Language).
-
-**BEHAVIOR RULES:**
-
-1. **🌐 LANGUAGE ADAPTATION (CRITICAL):**
-   - **DETECT** the user's language immediately.
-   - **ALWAYS** reply in the EXACT same language as the user.
-   - If User speaks English -> You speak English.
-   - If User speaks Indonesian -> You speak Indonesian (Formal/Polite).
-
-2. **💬 ADAPTIVE VERBOSITY (CRITICAL):**
-   - **NORMAL CHAT / SIMPLE TASKS:** Be **CONCISE** and **DIRECT**.
-     - Give the answer/code immediately.
-     - Do not provide long educational lectures unless asked.
-     - Keep explanations short and to the point.
-   - **COMPLEX TASKS / ANALYSIS:** Be **DETAILED** and **COMPREHENSIVE**.
-     - Explain logic, architecture, and potential pitfalls.
-
-3. **💻 CODE GENERATION STANDARDS:**
-   - **COMPLETE & FUNCTIONAL:** Always output production-ready code.
-   - **SEPARATION:** Separate explanations from code using headers.
-   - **SYNTAX HIGHLIGHTING:** Wrap ALL code in \`\`\`language blocks.
-   - **FRONTEND:** Responsive & Modern (Tailwind).
-   - **BACKEND:** Secure & Modular.
-
-4. **📂 FILE STRUCTURE:**
-   - For multi-file projects, show the tree structure first.
-
-5. **🚀 EXECUTION:**
-   - **NORMAL:** Just provide the run command.
-   - **ANALYSIS:** Provide detailed setup and debugging steps.
-
-6. **🔍 WEB SEARCH CITATION (IMPORTANT):**
-   - If you use information from Web Search, **DO NOT** mix links inside the text paragraph.
-   - **ALWAYS** list sources at the VERY END of your response using this EXACT format:
-   - Format: [SUMBER: Page Title | https://url.com]
-   - Example: [SUMBER: React Documentation | https://react.dev]
-   - Create one tag per source.`;
-
 export const ADMIN_PIN = '2719';
 export const ADMIN_TRIGGER_KEYWORD = 'modeadmin';
 export const MODEL_ID = 'llama-3.3-70b-versatile';
@@ -50,7 +6,110 @@ export const MODEL_ID = 'llama-3.3-70b-versatile';
 export const APP_NAME = 'Kztutorial AI';
 export const APP_DESCRIPTION = 'Asisten Coding Pintar untuk Developer Termux & Python';
 
-// --- PAKET LANGGANAN (NEW) ---
+// --- TRANSLATION DICTIONARY ---
+export const TRANSLATIONS = {
+  id: {
+    greeting: "Halo Bang!",
+    welcome_title: "Selamat datang di",
+    welcome_subtitle: "Partner koding. Apapun kendala soal Termux, Python, atau project lainnya, langsung gas tanya aja.",
+    limit_label: "Kuota Harian",
+    premium_label: "Total Chat Hari Ini",
+    usage_text: "Terpakai",
+    upgrade_btn: "Upgrade Premium",
+    input_placeholder: "Ketik pesan...",
+    input_placeholder_limit: "Limit Habis. Ketik untuk Info...",
+    input_placeholder_cooldown: "Tunggu sebentar...",
+    settings_title: "Akun Saya",
+    settings_lang: "Bahasa Aplikasi",
+    settings_pref: "Preferensi Aplikasi",
+    btn_logout: "Keluar Akun",
+    premium_badge: "PREMIUM USER",
+    free_badge: "FREE TIER",
+    active_until: "Masa Aktif",
+    forever: "Selamanya (Gratis)",
+    status_premium: "Akses tanpa batas kuota",
+    status_free: "Kuota Terpakai",
+    toast_limit: "Limit Harian Habis",
+    toast_premium_lock: "Fitur Premium",
+    btn_open: "Buka Akses"
+  },
+  en: {
+    greeting: "Hello Bro!",
+    welcome_title: "Welcome to",
+    welcome_subtitle: "Your coding partner. Any issues with Termux, Python, or projects? Just ask away.",
+    limit_label: "Daily Quota",
+    premium_label: "Total Chats Today",
+    usage_text: "Used",
+    upgrade_btn: "Upgrade Premium",
+    input_placeholder: "Type a message...",
+    input_placeholder_limit: "Limit Reached. Type for Info...",
+    input_placeholder_cooldown: "Cooling down...",
+    settings_title: "My Account",
+    settings_lang: "App Language",
+    settings_pref: "App Preferences",
+    btn_logout: "Log Out",
+    premium_badge: "PREMIUM USER",
+    free_badge: "FREE TIER",
+    active_until: "Active Until",
+    forever: "Forever (Free)",
+    status_premium: "Unlimited Access",
+    status_free: "Quota Used",
+    toast_limit: "Daily Limit Reached",
+    toast_premium_lock: "Premium Feature",
+    btn_open: "Unlock Access"
+  }
+};
+
+// --- DYNAMIC SYSTEM PROMPTS ---
+const BASE_RULES = `
+**BEHAVIOR RULES:**
+1. **💬 ADAPTIVE VERBOSITY:**
+   - **NORMAL CHAT:** Be CONCISE and DIRECT.
+   - **COMPLEX TASKS:** Be DETAILED and COMPREHENSIVE.
+2. **💻 CODE GENERATION:**
+   - **ALWAYS** output production-ready code.
+   - **SEPARATION:** Separate explanations from code.
+   - **SYNTAX HIGHLIGHTING:** Wrap ALL code in \`\`\`language blocks.
+3. **🔍 WEB SEARCH CITATION:**
+   - If using Web Search, **ALWAYS** list sources at the end: [SUMBER: Page Title | https://url.com]
+`;
+
+export const SYSTEM_PROMPT_ID = `You are "AI ASISTEN", a Senior Full-Stack Developer Assistant created by Kz.tutorial.
+
+**IDENTITY (INDONESIAN MODE):**
+- **Role:** Senior Developer & Architect.
+- **Vibe:** Asik, Santai tapi Pinter (Partner Mabar Coding).
+- **Language:** INDONESIAN (Slang/Formal Adaptive).
+- **Panggilan:** Panggil user dengan "Bang", "Bro", atau "Lu". Gunakan kata ganti "Gue" untuk diri sendiri jika konteks santai.
+
+${BASE_RULES}
+
+[PRIORITAS UTAMA]
+1. Jawab pertanyaan user to-the-point.
+2. Jangan ceramah panjang lebar kalau tidak diminta.
+3. Bantu user Termux & Python dengan solusi praktis.
+`;
+
+export const SYSTEM_PROMPT_EN = `You are "AI ASSISTANT", a Senior Full-Stack Developer Assistant created by Kz.tutorial.
+
+**IDENTITY (ENGLISH MODE):**
+- **Role:** Senior Developer & Architect.
+- **Vibe:** Cool, Professional, Efficient.
+- **Language:** ENGLISH (Professional/Casual).
+- **Address:** Call user "Bro", "Mate", or "Dev". Use "I" for yourself.
+
+${BASE_RULES}
+
+[TOP PRIORITIES]
+1. Answer strictly to the point.
+2. No unnecessary yapping or lecturing.
+3. Provide practical solutions for Termux & Python users.
+`;
+
+// Default System Prompt (Fallback)
+export const SYSTEM_PROMPT = SYSTEM_PROMPT_ID;
+
+// --- PAKET LANGGANAN ---
 export const SUBSCRIPTION_PACKAGES = [
   {
     id: 'basic_pack',

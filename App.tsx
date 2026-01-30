@@ -225,7 +225,7 @@ const MainApp: React.FC = () => {
           onOpenSettings={() => setShowSettingsModal(true)}
           onOpenInbox={() => setShowInboxModal(true)} 
           unreadCount={unreadCount} 
-          error={error} settings={settings} userCredits={profile?.credits || 0}
+          error={error} settings={settings}
           isProfileLoading={isProfileLoading}
           onOpenTopUp={() => setShowTopUpModal(true)}
           cooldownTimer={cooldownTimer} // Pass timer

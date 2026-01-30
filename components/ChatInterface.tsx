@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
-import { Send, Bot, User, Code2, Settings, Zap, Terminal, AlertTriangle, FileCode, Sparkles, BrainCircuit, ArrowDown, ChevronDown, Coins, Bell, Trash2, Check, Copy, Share2, ThumbsUp, ThumbsDown, Globe, Camera, Maximize2, X, Loader2, Link as LinkIcon, ExternalLink, CreditCard, Crown, Star, Clock } from 'lucide-react';
+import { Send, Bot, User, Code2, Settings, Zap, Terminal, AlertTriangle, FileCode, Sparkles, BrainCircuit, ArrowDown, ChevronDown, Coins, Bell, Trash2, Check, Copy, Share2, ThumbsUp, ThumbsDown, Globe, Camera, Maximize2, X, Loader2, Link as LinkIcon, ExternalLink, CreditCard, Crown, Star, Clock, Lock } from 'lucide-react';
 import { Message, AppSettings } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
 import { ImageUpload } from './ImageUpload';
-import { useAuth } from '../contexts/AuthContext'; 
+import { useAuth } from '../contexts/AuthContext';
+import { TRANSLATIONS } from '../constants';
 
 interface ChatInterfaceProps {
   messages: Message[];
@@ -16,7 +17,6 @@ interface ChatInterfaceProps {
   unreadCount: number;
   settings: AppSettings;
   error: string | null;
-  userCredits: number;
   isProfileLoading: boolean;
   cooldownTimer?: number; // New Prop
 }
@@ -322,8 +322,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [isRinging, setIsRinging] = useState(false);
   const prevUnreadCountRef = useRef(unreadCount);
   
-  // NEW STATE FOR LIMIT POPUP
+  // NEW STATE FOR POPUPS
   const [showLimitPopup, setShowLimitPopup] = useState(false);
+  const [showPremiumLockPopup, setShowPremiumLockPopup] = useState(false);
   
   const prevLoadingRef = useRef(isLoading);
   const { terminalMode } = settings;
@@ -333,6 +334,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const dailyUsage = profile?.daily_usage || 0;
   const isLimitReached = !isPremium && dailyUsage >= 20;
   const isCooldown = cooldownTimer > 0;
+  
+  // TRANSLATION
+  const t = TRANSLATIONS[profile?.language || 'id'];
 
   useEffect(() => {
     if (unreadCount > prevUnreadCountRef.current) {
@@ -382,6 +386,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       if (navigator.vibrate) navigator.vibrate(20);
     }
   }, [isLoading, messages, settings.hapticEnabled]);
+
+  const handleToggleAnalysis = () => {
+    if (!isPremium) {
+      setShowPremiumLockPopup(true);
+      setTimeout(() => setShowPremiumLockPopup(false), 4000);
+      return;
+    }
+    setIsAnalysisMode(!isAnalysisMode);
+    setIsSearchMode(false);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -526,23 +540,19 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             
             <div className={`max-w-md space-y-4 ${terminalMode ? 'font-mono text-green-500' : 'text-slate-300'}`}>
               <h2 className="text-xl font-black tracking-tight">
-                {isPremium && <>Mode PREMIUM Aktif! 🚀<br/></>}
-                Selamat datang di <span className={terminalMode ? "underline" : "text-blue-400"}>KztutorialAI</span>, Bro! 🥳
+                {isPremium && <>{t.premium_badge} 🚀<br/></>}
+                {t.welcome_title} <span className={terminalMode ? "underline" : "text-blue-400"}>KztutorialAI</span> {t.greeting} 🥳
               </h2>
               <p className="text-sm leading-relaxed opacity-80">
-                Gue partner koding di sini. Apapun kendala soal Termux, Python, atau project lainnya, langsung gas tanya aja.
+                {t.welcome_subtitle}
               </p>
               
               {!isPremium && (
                 <div className={`p-3 text-xs border ${terminalMode ? 'border-green-900 bg-black' : 'bg-slate-900/50 border-slate-800 rounded-xl'}`}>
                   Limit harian sisa <span className="font-bold text-yellow-400">{20 - dailyUsage}</span>. 
-                  Mau unlimited? <button onClick={onOpenTopUp} className="text-blue-400 font-bold hover:underline">Upgrade Premium</button>
+                  Mau unlimited? <button onClick={onOpenTopUp} className="text-blue-400 font-bold hover:underline">{t.upgrade_btn}</button>
                 </div>
               )}
-              
-              <p className="text-xs font-bold animate-pulse pt-4">
-                {terminalMode ? '> SIAP EKSEKUSI PROJECT APA HARI INI?' : 'Jadi, project apa yang mau kita eksekusi hari ini?'}
-              </p>
             </div>
           </div>
         )}
@@ -634,15 +644,36 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                <AlertTriangle size={20} />
              </div>
              <div>
-               <h4 className={`font-bold text-sm ${terminalMode ? 'text-green-500' : 'text-white'}`}>Limit Harian Habis</h4>
-               <p className="text-xs text-slate-400">Kuota 20 chat tercapai. Upgrade untuk lanjut.</p>
+               <h4 className={`font-bold text-sm ${terminalMode ? 'text-green-500' : 'text-white'}`}>{t.toast_limit}</h4>
+               <p className="text-xs text-slate-400">{t.input_placeholder_limit}</p>
              </div>
           </div>
           <button 
             onClick={onOpenTopUp}
             className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${terminalMode ? 'bg-green-600 text-black hover:bg-green-500' : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-lg'}`}
           >
-            Upgrade Premium
+            {t.upgrade_btn}
+          </button>
+        </div>
+      )}
+
+      {/* PREMIUM FEATURE LOCKED POPUP */}
+      {showPremiumLockPopup && (
+        <div className={`absolute bottom-20 left-4 right-4 z-50 animate-in slide-in-from-bottom-5 duration-300 ${terminalMode ? 'bg-black border border-green-500' : 'bg-slate-900 border border-purple-500/50'} p-4 rounded-xl shadow-2xl flex items-center justify-between gap-4`}>
+          <div className="flex items-center gap-3">
+             <div className={`p-2 rounded-full ${terminalMode ? 'bg-green-500/20 text-green-500' : 'bg-purple-500/20 text-purple-400'}`}>
+               <Lock size={20} />
+             </div>
+             <div>
+               <h4 className={`font-bold text-sm ${terminalMode ? 'text-green-500' : 'text-white'}`}>{t.toast_premium_lock}</h4>
+               <p className="text-xs text-slate-400">Mode Analisis (Deep Reasoning) hanya untuk Premium User.</p>
+             </div>
+          </div>
+          <button 
+            onClick={onOpenTopUp}
+            className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${terminalMode ? 'bg-green-600 text-black hover:bg-green-500' : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:shadow-lg'}`}
+          >
+            {t.btn_open}
           </button>
         </div>
       )}
@@ -659,17 +690,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                value={input}
                disabled={isProfileLoading || isCooldown}
                onChange={(e) => setInput(e.target.value)}
-               placeholder={isCooldown ? `Cooling down... ${cooldownTimer}s` : (isLimitReached ? "Limit Habis. Ketik untuk Info..." : "Enter command...")}
+               placeholder={isCooldown ? `${t.input_placeholder_cooldown} ${cooldownTimer}s` : (isLimitReached ? t.input_placeholder_limit : "Enter command...")}
                className="flex-1 bg-transparent border-none outline-none text-green-500 font-mono placeholder-green-900"
                autoComplete="off"
              />
 
              <button
                type="button"
-               onClick={() => { setIsAnalysisMode(!isAnalysisMode); setIsSearchMode(false); }}
-               className={`p-1 ${isAnalysisMode ? 'text-green-400' : 'text-green-900 hover:text-green-600'}`}
+               onClick={() => { handleToggleAnalysis(); setIsSearchMode(false); }}
+               className={`p-1 relative ${isAnalysisMode ? 'text-green-400' : 'text-green-900 hover:text-green-600'}`}
                title="Analysis Mode"
              >
+               {!isPremium && <Lock size={10} className="absolute -top-1 -right-1 text-green-700"/>}
                <Sparkles size={16} />
              </button>
 
@@ -696,10 +728,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               />
               <button
                 type="button"
-                onClick={() => { setIsAnalysisMode(!isAnalysisMode); setIsSearchMode(false); }}
-                className={`p-2 rounded-lg transition-all ${isAnalysisMode ? 'bg-purple-600 text-white shadow-inner shadow-purple-900/40' : 'text-slate-400 hover:bg-slate-800'}`}
-                title="Mode Analisis"
+                onClick={() => { handleToggleAnalysis(); setIsSearchMode(false); }}
+                className={`p-2 rounded-lg transition-all relative ${isAnalysisMode ? 'bg-purple-600 text-white shadow-inner shadow-purple-900/40' : 'text-slate-400 hover:bg-slate-800'}`}
+                title={isPremium ? "Mode Analisis" : "Mode Analisis (Premium Only)"}
               >
+                {!isPremium && <div className="absolute top-1 right-1 bg-slate-900 rounded-full p-0.5"><Lock size={8} className="text-slate-400"/></div>}
                 <Sparkles size={18} />
               </button>
             </div>
@@ -709,7 +742,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               value={input}
               disabled={isProfileLoading || isCooldown} 
               onChange={(e) => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${e.target.scrollHeight}px`; }}
-              placeholder={isProfileLoading ? "Memuat..." : (isCooldown ? `Tunggu ${cooldownTimer} detik...` : (isLimitReached ? "Limit Habis. Ketik untuk Info..." : "Ketik pesan..."))}
+              placeholder={isProfileLoading ? "..." : (isCooldown ? `${t.input_placeholder_cooldown} ${cooldownTimer}s` : (isLimitReached ? t.input_placeholder_limit : t.input_placeholder))}
               className="flex-1 max-h-32 bg-transparent text-sm px-3 py-2 border-none focus:ring-0 text-white placeholder-slate-400 resize-none overflow-y-auto"
               rows={1}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }}

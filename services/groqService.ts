@@ -1,35 +1,52 @@
 import { supabase } from './supabaseClient';
+import { SYSTEM_PROMPT_ID, SYSTEM_PROMPT_EN } from '../constants';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 // --- KONFIGURASI MODEL ---
+// FAST: Llama 3.1 8B (Instant, Low Cost, High Speed) -> Chat ringan, sapaan, info dasar
 const FAST_MODEL = 'llama-3.1-8b-instant';       
+// SMART: Llama 3.3 70B (Versatile, High Reasoning) -> Coding, Debugging, Arsitektur, Logika Berat
 const SMART_MODEL = 'llama-3.3-70b-versatile';  
 
-// --- KEYWORDS DETECTOR ---
+// --- KEYWORDS DETECTOR (Kompleksitas Tinggi) ---
 const COMPLEX_TASK_KEYWORDS = [
-  'buatkan', 'script', 'code', 'coding', 'debug', 'fix', 'error', 
+  // Coding & Technical
+  'buatkan', 'script', 'code', 'coding', 'debug', 'fix', 'error', 'log',
   'function', 'api', 'deploy', 'database', 'sql', 'algo', 'analisis', 
-  'optimize', 'refactor', 'terminal', 'bug', 'salah', 'kenapa'
+  'optimize', 'refactor', 'terminal', 'bug', 'salah', 'kenapa', 'regex',
+  'json', 'docker', 'aws', 'server', 'react', 'python', 'typescript',
+  
+  // Reasoning & Deep explanation
+  'jelaskan secara detail', 'analisa', 'bandingkan', 'konsep', 'arsitektur',
+  'best practice', 'cara kerja', 'mengapa', 'solusi', 'tutorial',
+  'explain', 'analyze', 'compare', 'concept', 'architecture', 'why', 'solution'
 ];
 
 const NEGATIVE_EMOTION_KEYWORDS = [
   'bodoh', 'goblok', 'tolol', 'stupid', 'bego', 
   'capek', 'pusing', 'kesal', 'marah', 'gagal terus', 
-  'stres', 'bingung', 'susah', 'anjing', 'tai', 'shit'
+  'stres', 'bingung', 'susah', 'anjing', 'tai', 'shit',
+  'idiot', 'useless', 'fail', 'angry'
 ];
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /** 1. TIME HELPER */
-function getTimeContext(): string {
+function getTimeContext(lang: 'id' | 'en'): string {
   const now = new Date();
-  const userLocalTime = now.toLocaleString('id-ID', { 
+  const userLocalTime = now.toLocaleString(lang === 'id' ? 'id-ID' : 'en-US', { 
      weekday: 'long', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' 
   });
   const hour = now.getHours();
-  let greeting = hour >= 3 && hour < 11 ? "Pagi" : hour >= 11 && hour < 15 ? "Siang" : hour >= 15 && hour < 18 ? "Sore" : "Malam";
-  return `[WAKTU: ${userLocalTime}. Sapa "${greeting}" HANYA jika ini pesan pertama.]`;
+  
+  if (lang === 'id') {
+    let greeting = hour >= 3 && hour < 11 ? "Pagi" : hour >= 11 && hour < 15 ? "Siang" : hour >= 15 && hour < 18 ? "Sore" : "Malam";
+    return `[WAKTU: ${userLocalTime}. Sapa "${greeting}" HANYA jika ini pesan pertama.]`;
+  } else {
+    let greeting = hour >= 3 && hour < 12 ? "Good Morning" : hour >= 12 && hour < 17 ? "Good Afternoon" : "Good Evening";
+    return `[TIME: ${userLocalTime}. Greet "${greeting}" ONLY if this is the first message.]`;
+  }
 }
 
 /** 2. MOOD ANALYZER */
@@ -37,18 +54,33 @@ function detectMoodAndConstructPrompt(lastMessage: string): string {
   const lowerMsg = lastMessage.toLowerCase();
   const isStressed = NEGATIVE_EMOTION_KEYWORDS.some(word => lowerMsg.includes(word));
   if (isStressed) {
-    return `\n[EMOTION: USER STRESSED] -> Mode: Sabar, Empati, Solutif. Jangan teknis berlebihan. Validasi dulu emosinya.`;
+    return `\n[EMOTION: USER STRESSED] -> Mode: Patient, Empathetic, Solution-oriented. Do not be overly technical yet. Validate emotion first.`;
   }
   return "";
 }
 
-/** 3. COMPLEXITY ANALYZER */
-function selectOptimalModel(lastMessage: string): string {
+/** 3. COMPLEXITY ANALYZER (AUTO-SWITCH LOGIC) */
+function selectOptimalModel(lastMessage: string): { model: string, reason: string } {
   const lowerMsg = lastMessage.toLowerCase();
-  const isComplex = COMPLEX_TASK_KEYWORDS.some(keyword => lowerMsg.includes(keyword)) || 
-                    lowerMsg.includes('```') || 
-                    lastMessage.length > 500;
-  return isComplex ? SMART_MODEL : FAST_MODEL;
+  
+  // A. Cek Panjang Input (> 200 karakter biasanya butuh konteks lebih baik)
+  if (lastMessage.length > 300) {
+    return { model: SMART_MODEL, reason: 'Input Panjang (Deep Context)' };
+  }
+
+  // B. Cek Code Block
+  if (lastMessage.includes('```') || lastMessage.includes('    ')) {
+    return { model: SMART_MODEL, reason: 'Code Block Detected' };
+  }
+
+  // C. Cek Keywords
+  const foundKeyword = COMPLEX_TASK_KEYWORDS.find(k => lowerMsg.includes(k));
+  if (foundKeyword) {
+    return { model: SMART_MODEL, reason: `Keyword: ${foundKeyword}` };
+  }
+
+  // Default ke Fast Model
+  return { model: FAST_MODEL, reason: 'Simple Query' };
 }
 
 /** 4. MEMORY FETCHING */
@@ -83,7 +115,7 @@ export async function* streamGroqRequest(
     throw new Error("Gagal mengambil API Key dari server.");
   }
 
-  // B. CHECK SUBSCRIPTION LIMIT (CORE LOGIC CHANGE)
+  // B. CHECK SUBSCRIPTION LIMIT
   if (userId) {
     const { data: usageCheck, error: usageError } = await supabase.rpc('check_and_increment_usage', { p_user_id: userId });
     
@@ -96,120 +128,111 @@ export async function* streamGroqRequest(
     }
   }
 
-  // --- NEW FEATURE: FETCH REAL-TIME USER STATUS FOR AI CONTEXT ---
+  // --- FETCH REAL-TIME USER STATUS & LANGUAGE ---
   let userStatusPrompt = "";
+  let userLang: 'id' | 'en' = 'id';
+
   if (userId) {
     try {
       const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
       if (profile) {
+        userLang = profile.language || 'id'; // GET LANGUAGE
+        
         const isPremium = profile.is_premium && profile.premium_until && new Date(profile.premium_until) > new Date();
         const premiumDate = profile.premium_until 
-          ? new Date(profile.premium_until).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) 
+          ? new Date(profile.premium_until).toLocaleDateString(userLang === 'id' ? 'id-ID' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' }) 
           : '-';
         
         userStatusPrompt = `
-[STATUS AKUN USER (REAL-TIME DATA)]
-- Nama: ${profile.full_name || 'User'}
+[USER ACCOUNT STATUS]
+- Name: ${profile.full_name || 'User'}
 - Email: ${profile.email}
-- Tipe Akun: ${isPremium ? '👑 PREMIUM' : 'FREE TIER'}
-- Limit Harian Terpakai: ${profile.daily_usage} / ${isPremium ? 'Unlimited' : '20'}
-- Masa Aktif Premium: ${isPremium ? premiumDate : 'Tidak Aktif'}
+- Type: ${isPremium ? '👑 PREMIUM' : 'FREE TIER'}
+- Daily Usage: ${profile.daily_usage} / ${isPremium ? 'Unlimited' : '20'}
+- Premium Expiry: ${isPremium ? premiumDate : 'Inactive'}
+- Language Pref: ${userLang === 'id' ? 'Bahasa Indonesia' : 'English'}
 - ID: ${userId}
-*INSTRUKSI: Jika user bertanya tentang status akun/limit/sisa kuota, JAWABLAH berdasarkan data di atas. Jangan mengarang.*
 `;
       }
-    } catch (err) {
-      console.error("Failed to fetch user context for AI", err);
-    }
+    } catch (err) { console.error("Failed to fetch user context", err); }
   }
 
-  // C. MODEL SELECTION
+  // C. MODEL SELECTION STRATEGY
   const lastMsgObj = messages[messages.length - 1];
   const lastMsgContent = typeof lastMsgObj.content === 'string' ? lastMsgObj.content : JSON.stringify(lastMsgObj.content);
   const hasImage = Array.isArray(lastMsgObj.content);
   const isSearchResult = lastMsgContent.includes('DATA WEB:');
   
   let activeModel = FAST_MODEL;
+  let modelReason = "Standard";
 
   if (hasImage) {
-    activeModel = initialModelId; // Use Vision Model
+    activeModel = initialModelId; // Vision Model (Llama 3.2 Vision)
+    modelReason = "Vision Analysis";
   } else if (isSearchResult) {
-    activeModel = SMART_MODEL;
+    activeModel = SMART_MODEL; // Web Search butuh penalaran tinggi
+    modelReason = "Web Search Context";
   } else {
-    activeModel = selectOptimalModel(lastMsgContent);
+    // AUTO SWITCH LOGIC
+    const selection = selectOptimalModel(lastMsgContent);
+    activeModel = selection.model;
+    modelReason = selection.reason;
   }
 
-  // D. BUILD SYSTEM PROMPT
-  const timePrompt = getTimeContext();
+  // D. BUILD SYSTEM PROMPT BASED ON LANGUAGE
+  const baseSystemPrompt = userLang === 'en' ? SYSTEM_PROMPT_EN : SYSTEM_PROMPT_ID;
+  const timePrompt = getTimeContext(userLang);
   const moodPrompt = detectMoodAndConstructPrompt(lastMsgContent);
   const memories = await fetchUserMemories(userId);
   const recentMemories = memories.slice(-2).join('; ');
-  const memoryPrompt = recentMemories ? `[INGATAN USER: ${recentMemories}]` : '';
+  const memoryPrompt = recentMemories ? `[USER MEMORIES: ${recentMemories}]` : '';
 
-  const systemMessage = messages.find(msg => msg.role === 'system');
-  const baseSystem = systemMessage ? systemMessage.content : "You are an AI Assistant.";
-  
   const finalSystemContent = `
-  ${baseSystem}
+  ${baseSystemPrompt}
   
   ${timePrompt}
   ${userStatusPrompt}
   ${memoryPrompt}
   ${moodPrompt}
 
-  [PRIORITAS UTAMA: JAWABAN RELEVAN & NYAMBUNG]
-  1. TUGAS: Jawab pertanyaan user to-the-point.
-  2. JANGAN MAKSA: Jangan roasting/jokes kalau user lagi serius error.
-  3. ANTI-YAPPING: Jangan ceramah panjang lebar.
-
-  [IDENTITAS: TEMAN MABAR CODING (KZ.TUTORIAL)]
-  - Lu partner coding Bang Jul. Asik, pinter, santai.
-  - Panggilan: Gue/Lu, Bang, Bro.
-
-  [ATURAN VISUAL]
-  1. [SUMBER: Judul | URL] -> Wajib kalau search web.
-  2. [SAVE_MEMORY: ...] -> Catat info penting user.
+  [RULES]
+  1. Use ${userLang === 'id' ? 'Indonesian' : 'English'} language.
+  2. [SUMBER: Title | URL] -> Mandatory if search used.
+  3. [SAVE_MEMORY: ...] -> Record important user info.
   `;
 
-  // E. PREPARE PAYLOAD (WITH SANITIZATION FOR 413 ERROR FIX)
+  // E. PREPARE PAYLOAD
   const chatHistory = messages.filter(msg => msg.role !== 'system');
   const limitedHistory = chatHistory.slice(-6); 
 
   const processedMessages = [
     { role: 'system', content: finalSystemContent },
     ...limitedHistory.map(msg => {
-      // 1. JANGAN UBAH PESAN TERAKHIR (Current Message)
-      // Ini penting agar gambar yang BARU SAJA diupload tetap terkirim ke AI
       if (msg === lastMsgObj) return msg;
-
-      // 2. UNTUK HISTORY: Convert Multimodal Array ke Text Biasa
       if (Array.isArray(msg.content)) {
         const text = msg.content.find((c: any) => c.type === 'text')?.text || "";
         return { role: msg.role, content: text };
       }
-      
-      // 3. UNTUK HISTORY: Hapus Base64 Image string yang besar
-      // Regex ini mencari pola ![...](data:image/...) dan menggantinya dengan placeholder
       if (typeof msg.content === 'string') {
-         // Regex optimization: [^\]]* matches alt text, [^;]+ matches mimetype, [^\)]+ matches base64 data
-         const cleaned = msg.content.replace(/!\[[^\]]*\]\(data:image\/[^;]+;base64,[^\)]+\)/g, '[Gambar Diupload]');
+         const cleaned = msg.content.replace(/!\[[^\]]*\]\(data:image\/[^;]+;base64,[^\)]+\)/g, '[Image Uploaded]');
          return { ...msg, content: cleaned };
       }
-
       return msg;
     })
   ];
 
-  // F. UI FEEDBACK
+  // F. UI FEEDBACK (INDICATOR)
   if (isSearchResult) {
-    yield "🔍 _Verifikasi data web..._\n\n";
+    yield userLang === 'id' ? "🔍 _Verifikasi data web..._\n\n" : "🔍 _Verifying web data..._\n\n";
     await delay(200);
   } else if (hasImage) {
-    yield "👁️ _Menganalisis screenshot (Llama 4 Vision)..._\n\n";
+    yield userLang === 'id' ? "👁️ _Menganalisis screenshot (Llama 3.2 Vision)..._\n\n" : "👁️ _Analyzing screenshot (Llama 3.2 Vision)..._\n\n";
     await delay(200);
   } else if (activeModel === SMART_MODEL && !moodPrompt) {
-    yield "⚡ _Menganalisis logika..._\n\n";
-    await delay(200);
+    // Beri tahu user kalau kita pakai model pintar
+    const msg = userLang === 'id' ? "⚡ _Mengaktifkan Llama 3.3 (70B) untuk analisis mendalam..._\n\n" : "⚡ _Activating Llama 3.3 (70B) for deep analysis..._\n\n";
+    yield msg;
+    await delay(300);
   }
 
   // G. EXECUTE API
@@ -229,22 +252,19 @@ export async function* streamGroqRequest(
           model: activeModel,
           messages: processedMessages,
           stream: true,
-          temperature: moodPrompt ? 0.6 : 0.4, 
+          temperature: moodPrompt ? 0.6 : (activeModel === SMART_MODEL ? 0.5 : 0.7), // Lebih presisi jika Smart
           max_tokens: 4096,
           top_p: 0.95
         }),
       });
 
-      // SMART HANDLING 429, 503, & 413
       if (response.status === 429 || response.status === 503) {
-         console.warn(`Key ${keyData.id} Limit (429/503). Switching with delay...`);
+         console.warn(`Key ${keyData.id} Limit. Switching...`);
          await delay(1000); 
          continue; 
       }
 
-      // Handle Payload Too Large specifically
       if (response.status === 413) {
-        console.error("Groq API Error: 413 (Payload Too Large).");
         throw new Error("Gambar terlalu besar atau chat terlalu panjang. Coba refresh chat.");
       }
 
@@ -300,9 +320,6 @@ export async function* streamGroqRequest(
     } catch (error) {
       console.error(`Error Key ${keyData.id}:`, error);
 
-      // --- CRITICAL UPDATE: REFUND USAGE ON SYSTEM ERROR ---
-      // Jika error bukan karena "Limit Harian Habis" (yang sudah dicek di awal),
-      // maka kita asumsikan ini error sistem/API Key/Network, jadi kita kembalikan limit user.
       const errorMessage = error instanceof Error ? error.message : String(error);
       const isUserLimitError = errorMessage.includes("Limit harian habis");
 
@@ -311,10 +328,7 @@ export async function* streamGroqRequest(
          await supabase.rpc('decrement_usage', { p_user_id: userId });
       }
 
-      // If it's 413, break loop immediately because switching keys won't fix payload size
-      if (errorMessage.includes("Gambar terlalu besar")) {
-        throw error;
-      }
+      if (errorMessage.includes("Gambar terlalu besar")) throw error;
     }
   }
 

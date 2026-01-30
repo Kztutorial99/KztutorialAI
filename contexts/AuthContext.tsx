@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { Session } from '@supabase/supabase-js';
@@ -12,6 +11,8 @@ interface Profile {
   premium_until: string | null;
   daily_usage: number;
   last_reset: string;
+  // New Field for Language
+  language: 'id' | 'en';
 }
 
 interface AuthContextType {
@@ -38,6 +39,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .single();
       
       if (error) console.error('Error fetching profile:', error);
+      
+      // Default language fallback if null
+      if (data && !data.language) data.language = 'id';
+      
       setProfile(data);
     } catch (err) {
       console.error('Unexpected error fetching profile', err);

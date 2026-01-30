@@ -31,7 +31,11 @@ const checkApiKeyHealth = async (key: string) => {
 
 // === SQL SCRIPT UPDATE (SUBSCRIPTION SYSTEM & CLEANUP) ===
 const REQUIRED_SQL = `
--- 1. FIX: NOTIFIKASI SELAMAT DATANG (HAPUS PESAN KREDIT LAMA)
+-- =========================================================
+-- 🛠️ UPDATE SISTEM NOTIFIKASI & LIMIT (JALANKAN INI!)
+-- =========================================================
+
+-- 1. FIX: NOTIFIKASI SELAMAT DATANG (Hapus Pesan "15 Kredit")
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS trigger AS $$
 BEGIN
@@ -44,7 +48,7 @@ BEGIN
   VALUES (
     new.id,
     '🎉 Akun Berhasil Dibuat!',
-    'Selamat datang di Kz.tutorial AI! Nikmati Free Tier dengan limit 20 Chat/Hari. Upgrade ke Premium untuk akses tanpa batas.',
+    'Selamat datang di Kz.tutorial AI! Akun Anda aktif dengan paket Free Tier (20 Chat/Hari). Upgrade ke Premium untuk akses tanpa batas.',
     'system'
   );
 
@@ -57,6 +61,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_premium boolean DEFAULT 
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS premium_until timestamptz;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS daily_usage int DEFAULT 0;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_reset date DEFAULT CURRENT_DATE;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS language text DEFAULT 'id';
 
 -- 3. CLEANUP LEGACY COLUMNS (Hapus Kolom Sampah)
 ALTER TABLE public.profiles DROP COLUMN IF EXISTS credits;
