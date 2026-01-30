@@ -144,7 +144,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onNaviga
         </nav>
 
         {/* HERO SECTION */}
-        <main className="flex-1 flex flex-col items-center justify-center text-center px-4 py-20">
+        {/* REVISI: Mengganti justify-center menjadi justify-start dan mengurangi padding atas (pt-12) */}
+        <main className="flex-1 flex flex-col items-center justify-start text-center px-4 pt-12 pb-20">
           
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -155,13 +156,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onNaviga
           {/* Headline */}
           <h1 className="text-5xl md:text-7xl font-black tracking-tight mb-6 max-w-5xl leading-tight animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
             Coding Lebih Cepat dengan <br className="hidden md:block"/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400">Kecerdasan Buatan</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400">Teknologi AI</span>
           </h1>
 
           {/* Subheadline */}
           <p className="text-slate-400 text-lg md:text-xl max-w-2xl mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
-            Asisten coding canggih khusus Developer. 
-            Dilengkapi dengan Web Search Real-time, Debugging Cerdas, dan Multi-Model AI (Llama 3.3).
+            AI Asisten. Dilengkapi dengan Mode Analisis Mendalam, Web Search Real-time, Debugging Cerdas, dan Multi-Model AI.
           </p>
 
           {/* CTA Buttons */}
